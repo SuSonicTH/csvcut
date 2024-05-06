@@ -23,7 +23,8 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(gpa);
     defer std.process.argsFree(gpa, args);
 
-    var options = Options{};
+    //var options = Options{};
+    const options = Options{};
 
     if (args.len == 1) {
         try noArgumentError();
@@ -49,26 +50,26 @@ fn printUsage(file: std.fs.File, exit: bool) !void {
     const help = @embedFile("USAGE.txt");
     try file.writeAll(version ++ help);
     if (exit) {
-        std.os.exit(0);
+        std.process.exit(0);
     }
 }
 
 fn printVersion() !void {
     const license = @embedFile("LICENSE.txt");
     try std.io.getStdOut().writeAll(version ++ license);
-    std.os.exit(0);
+    std.process.exit(0);
 }
 
 fn noArgumentError() !noreturn {
     try printUsage(std.io.getStdErr(), false);
     std.log.err("no argument given, expecting at least one option", .{});
-    std.os.exit(1);
+    std.process.exit(1);
 }
 
 fn argumentError(arg: []u8) !noreturn {
     try printUsage(std.io.getStdErr(), false);
     std.log.err("argument '{s}' is unknown\n", .{arg});
-    std.os.exit(1);
+    std.process.exit(1);
 }
 
 fn processFileByName(name: []const u8, options: Options) !void {
@@ -85,4 +86,106 @@ fn proccessFile(reader: std.fs.File.Reader, writer: std.fs.File.Writer, options:
     _ = writer;
     _ = options;
     //todo: implement
+}
+
+const Splitter = struct {
+    separator: u8 = undefined,
+    quoute: ?u8 = null,
+    line: []const u8 = undefined,
+    pos: usize = 0,
+
+    pub fn init(separator: u8, quoute: ?u8, line: []const u8) Splitter {
+        return .{
+            .separator = separator,
+            .quoute = quoute,
+            .line = line,
+        };
+    }
+
+    pub fn next(self: *Splitter) ?[]const u8 {
+        if (self.pos > self.line.len) return null;
+
+        var start: usize = undefined;
+        var end: usize = undefined;
+
+        if (self.quoute != null and self.find_quote()) {
+            start = self.pos;
+
+            //todo check for EOL return error
+            self.till_end_of_quote();
+            //todo check if we hit a quote else error
+
+            end = self.pos;
+            self.till_separator();
+        } else {
+            start = self.pos;
+            self.till_separator();
+            end = self.pos;
+        }
+
+        self.pos += 1;
+        return self.line[start..end];
+    }
+
+    fn find_quote(self: *Splitter) bool {
+        var pos = self.pos;
+        while (pos < self.line.len and self.line[pos] == ' ') {
+            pos += 1;
+        }
+        if (self.line[pos] == self.quoute.?) {
+            self.pos = pos + 1;
+            return true;
+        }
+        return false;
+    }
+
+    fn till_end_of_quote(self: *Splitter) void {
+        while (self.pos < self.line.len and self.line[self.pos] != self.quoute.?) {
+            self.pos += 1;
+        }
+    }
+
+    fn till_separator(self: *Splitter) void {
+        while (self.pos < self.line.len and self.line[self.pos] != self.separator) {
+            self.pos += 1;
+        }
+    }
+};
+
+const testing = std.testing;
+
+test "basic splitting values" {
+    var splitter = Splitter.init(',', null, "1,2,3");
+
+    try testing.expectEqualStrings("1", splitter.next().?);
+    try testing.expectEqualStrings("2", splitter.next().?);
+    try testing.expectEqualStrings("3", splitter.next().?);
+    try testing.expect(splitter.next() == null);
+}
+
+test "basic splitting by tab" {
+    var splitter = Splitter.init('\t', null, "1\t2\t3");
+
+    try testing.expectEqualStrings("1", splitter.next().?);
+    try testing.expectEqualStrings("2", splitter.next().?);
+    try testing.expectEqualStrings("3", splitter.next().?);
+    try testing.expect(splitter.next() == null);
+}
+
+test "basic splitting with separator inside quotes" {
+    var splitter = Splitter.init(',', '"', "\"1,0\",\"2,1\",\"3,2\"");
+
+    try testing.expectEqualStrings("1,0", splitter.next().?);
+    try testing.expectEqualStrings("2,1", splitter.next().?);
+    try testing.expectEqualStrings("3,2", splitter.next().?);
+    try testing.expect(splitter.next() == null);
+}
+
+test "splitting with quotes and spaces" {
+    var splitter = Splitter.init(',', '"', "  \"1\"  , \" 2 \" ,   \"3\"   ");
+
+    try testing.expectEqualStrings("1", splitter.next().?);
+    try testing.expectEqualStrings(" 2 ", splitter.next().?);
+    try testing.expectEqualStrings("3", splitter.next().?);
+    try testing.expect(splitter.next() == null);
 }
