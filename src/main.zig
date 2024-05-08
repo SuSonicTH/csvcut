@@ -2,19 +2,28 @@ const std = @import("std");
 
 const version = "csvcut v0.1\n\n";
 
-const Options = packed struct {
-    outputNumbers: bool = false,
-    outputNumbersNonEmpty: bool = false,
-    showEnds: bool = false,
-    squeezeBlank: bool = false,
-    showTabs: bool = false,
+const Options = struct {
+    separator: u8 = ',',
+    quoute: ?u8 = null,
 };
 
 const Arguments = enum {
-    @"--help",
     @"-h",
-    @"--version",
+    @"--help",
     @"-v",
+    @"--version",
+    @"-T",
+    @"--tab",
+    @"-C",
+    @"--comma",
+    @"-S",
+    @"--semicolon",
+    @"-P",
+    @"--pipe",
+    @"-D",
+    @"--doubleQuoute",
+    @"-Q",
+    @"--Quoute",
 };
 
 pub fn main() !void {
@@ -23,8 +32,7 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(gpa);
     defer std.process.argsFree(gpa, args);
 
-    //var options = Options{};
-    const options = Options{};
+    var options = Options{};
 
     if (args.len == 1) {
         try noArgumentError();
@@ -35,8 +43,14 @@ pub fn main() !void {
             switch (std.meta.stringToEnum(Arguments, arg) orelse {
                 try argumentError(arg);
             }) {
-                .@"--help", .@"-h" => try printUsage(std.io.getStdOut(), true),
-                .@"--version", .@"-v" => try printVersion(),
+                .@"-h", .@"--help" => try printUsage(std.io.getStdOut(), true),
+                .@"-v", .@"--version" => try printVersion(),
+                .@"-T", .@"--tab" => options.separator = '\t',
+                .@"-C", .@"--comma" => options.separator = ',',
+                .@"-S", .@"--semicolon" => options.separator = ';',
+                .@"-P", .@"--pipe" => options.separator = '|',
+                .@"-D", .@"--doubleQuoute" => options.quoute = '"',
+                .@"-Q", .@"--Quoute" => options.quoute = '\'',
             }
         } else if (arg[0] == '-' and arg.len == 1) {
             try proccessFile(std.io.getStdIn().reader(), std.io.getStdOut().writer(), options);
@@ -82,11 +96,24 @@ fn processFileByName(name: []const u8, options: Options) !void {
 }
 
 fn proccessFile(reader: std.fs.File.Reader, writer: std.fs.File.Writer, options: Options) !void {
-    _ = reader;
-    _ = writer;
-    _ = options;
-    //todo: implement
+    var buffered_reader = std.io.bufferedReader(reader);
+    var buffered_writer = std.io.bufferedWriter(writer);
+    var buffer: [1024]u8 = undefined;
+    var splitter: Splitter = Splitter.init(options.separator, options.quoute);
+
+    while (try buffered_reader.reader().readUntilDelimiterOrEof(&buffer, '\n')) |line| {
+        splitter.iterate(line);
+        while (try splitter.next()) |field| {
+            _ = try buffered_writer.write(field);
+            _ = try buffered_writer.write("\t");
+        }
+        _ = try buffered_writer.write("\n");
+    }
 }
+
+const SplitterError = error{
+    FoundEndOfLineAfterOpeningQuoute,
+};
 
 const Splitter = struct {
     separator: u8 = undefined,
@@ -94,16 +121,20 @@ const Splitter = struct {
     line: []const u8 = undefined,
     pos: usize = 0,
 
-    pub fn init(separator: u8, quoute: ?u8, line: []const u8) Splitter {
+    pub fn init(separator: u8, quoute: ?u8) Splitter {
         return .{
             .separator = separator,
             .quoute = quoute,
-            .line = line,
         };
     }
 
-    pub fn next(self: *Splitter) ?[]const u8 {
-        if (self.pos > self.line.len) return null;
+    pub fn iterate(self: *Splitter, line: []const u8) void {
+        self.line = line;
+        self.pos = 0;
+    }
+
+    pub fn next(self: *Splitter) SplitterError!?[]const u8 {
+        if (self.end_of_line()) return null;
 
         var start: usize = undefined;
         var end: usize = undefined;
@@ -111,9 +142,8 @@ const Splitter = struct {
         if (self.quoute != null and self.find_quote()) {
             start = self.pos;
 
-            //todo check for EOL return error
             self.till_end_of_quote();
-            //todo check if we hit a quote else error
+            if (self.end_of_line()) return SplitterError.FoundEndOfLineAfterOpeningQuoute;
 
             end = self.pos;
             self.till_separator();
@@ -125,6 +155,10 @@ const Splitter = struct {
 
         self.pos += 1;
         return self.line[start..end];
+    }
+
+    fn end_of_line(self: *Splitter) bool {
+        return self.pos >= self.line.len or self.line[self.pos] == '\r' or self.line[self.pos] == '\n';
     }
 
     fn find_quote(self: *Splitter) bool {
@@ -155,37 +189,60 @@ const Splitter = struct {
 const testing = std.testing;
 
 test "basic splitting values" {
-    var splitter = Splitter.init(',', null, "1,2,3");
+    var splitter = Splitter.init(',', null);
+    splitter.iterate("1,2,3");
+    expect_one_two_three_null(splitter);
+}
 
-    try testing.expectEqualStrings("1", splitter.next().?);
-    try testing.expectEqualStrings("2", splitter.next().?);
-    try testing.expectEqualStrings("3", splitter.next().?);
-    try testing.expect(splitter.next() == null);
+fn expect_one_two_three_null(splitter: *Splitter) void {
+    try testing.expectEqualStrings("1", (try splitter.next()).?);
+    try testing.expectEqualStrings("2", (try splitter.next()).?);
+    try testing.expectEqualStrings("3", (try splitter.next()).?);
+    try testing.expect((try splitter.next()) == null);
+}
+
+test "basic splitting values with CR" {
+    var splitter = Splitter.init(',', null);
+    splitter.iterate("1,2,3\r");
+    expect_one_two_three_null(splitter);
+}
+
+test "basic splitting values with LF" {
+    var splitter = Splitter.init(',', null);
+    splitter.iterate("1,2,3\r");
+    expect_one_two_three_null(splitter);
 }
 
 test "basic splitting by tab" {
-    var splitter = Splitter.init('\t', null, "1\t2\t3");
-
-    try testing.expectEqualStrings("1", splitter.next().?);
-    try testing.expectEqualStrings("2", splitter.next().?);
-    try testing.expectEqualStrings("3", splitter.next().?);
-    try testing.expect(splitter.next() == null);
+    var splitter = Splitter.init('\t', null);
+    splitter.iterate("1\t2\t3");
+    expect_one_two_three_null(splitter);
 }
 
 test "basic splitting with separator inside quotes" {
-    var splitter = Splitter.init(',', '"', "\"1,0\",\"2,1\",\"3,2\"");
+    var splitter = Splitter.init(',', '"');
+    splitter.iterate("\"1,0\",\"2,1\",\"3,2\"");
 
-    try testing.expectEqualStrings("1,0", splitter.next().?);
-    try testing.expectEqualStrings("2,1", splitter.next().?);
-    try testing.expectEqualStrings("3,2", splitter.next().?);
-    try testing.expect(splitter.next() == null);
+    try testing.expectEqualStrings("1,0", (try splitter.next()).?);
+    try testing.expectEqualStrings("2,1", (try splitter.next()).?);
+    try testing.expectEqualStrings("3,2", (try splitter.next()).?);
+    try testing.expect((try splitter.next()) == null);
 }
 
 test "splitting with quotes and spaces" {
-    var splitter = Splitter.init(',', '"', "  \"1\"  , \" 2 \" ,   \"3\"   ");
+    var splitter = Splitter.init(',', '"');
+    splitter.iterate("  \"1\"  , \" 2 \" ,   \"3\"   ");
 
-    try testing.expectEqualStrings("1", splitter.next().?);
-    try testing.expectEqualStrings(" 2 ", splitter.next().?);
-    try testing.expectEqualStrings("3", splitter.next().?);
-    try testing.expect(splitter.next() == null);
+    try testing.expectEqualStrings("1", (try splitter.next()).?);
+    try testing.expectEqualStrings(" 2 ", (try splitter.next()).?);
+    try testing.expectEqualStrings("3", (try splitter.next()).?);
+    try testing.expect((try splitter.next()) == null);
+}
+
+test "error on splitting with open quote" {
+    var splitter = Splitter.init(',', '"');
+    splitter.iterate("1,\"2,3");
+
+    try testing.expectEqualStrings("1", (try splitter.next()).?);
+    try testing.expectError(SplitterError.FoundEndOfLineAfterOpeningQuoute, splitter.next());
 }
