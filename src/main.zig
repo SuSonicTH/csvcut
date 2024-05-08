@@ -174,13 +174,13 @@ const Splitter = struct {
     }
 
     fn till_end_of_quote(self: *Splitter) void {
-        while (self.pos < self.line.len and self.line[self.pos] != self.quoute.?) {
+        while (!self.end_of_line() and self.line[self.pos] != self.quoute.?) {
             self.pos += 1;
         }
     }
 
     fn till_separator(self: *Splitter) void {
-        while (self.pos < self.line.len and self.line[self.pos] != self.separator) {
+        while (!self.end_of_line() and self.line[self.pos] != self.separator) {
             self.pos += 1;
         }
     }
@@ -191,10 +191,10 @@ const testing = std.testing;
 test "basic splitting values" {
     var splitter = Splitter.init(',', null);
     splitter.iterate("1,2,3");
-    expect_one_two_three_null(splitter);
+    try expect_one_two_three_null(&splitter);
 }
 
-fn expect_one_two_three_null(splitter: *Splitter) void {
+fn expect_one_two_three_null(splitter: *Splitter) !void {
     try testing.expectEqualStrings("1", (try splitter.next()).?);
     try testing.expectEqualStrings("2", (try splitter.next()).?);
     try testing.expectEqualStrings("3", (try splitter.next()).?);
@@ -204,19 +204,19 @@ fn expect_one_two_three_null(splitter: *Splitter) void {
 test "basic splitting values with CR" {
     var splitter = Splitter.init(',', null);
     splitter.iterate("1,2,3\r");
-    expect_one_two_three_null(splitter);
+    try expect_one_two_three_null(&splitter);
 }
 
 test "basic splitting values with LF" {
     var splitter = Splitter.init(',', null);
-    splitter.iterate("1,2,3\r");
-    expect_one_two_three_null(splitter);
+    splitter.iterate("1,2,3\n");
+    try expect_one_two_three_null(&splitter);
 }
 
 test "basic splitting by tab" {
     var splitter = Splitter.init('\t', null);
     splitter.iterate("1\t2\t3");
-    expect_one_two_three_null(splitter);
+    try expect_one_two_three_null(&splitter);
 }
 
 test "basic splitting with separator inside quotes" {
