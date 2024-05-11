@@ -4,8 +4,10 @@ const csvline = @import("csvline.zig");
 const version = "csvcut v0.1\n\n";
 
 const Options = struct {
-    separator: u8 = ',',
-    quoute: ?u8 = null,
+    input_separator: u8 = ',',
+    input_quoute: ?u8 = null,
+    output_separator: u8 = ',',
+    output_quoute: ?u8 = null,
 };
 
 const Arguments = enum {
@@ -13,18 +15,30 @@ const Arguments = enum {
     @"--help",
     @"-v",
     @"--version",
-    @"-T",
+    @"-t",
     @"--tab",
-    @"-C",
+    @"-c",
     @"--comma",
-    @"-S",
+    @"-s",
     @"--semicolon",
-    @"-P",
+    @"-p",
     @"--pipe",
-    @"-D",
+    @"-d",
     @"--doubleQuoute",
+    @"-q",
+    @"--quoute",
+    @"-T",
+    @"--outputTab",
+    @"-C",
+    @"--outputComma",
+    @"-S",
+    @"--outputSemicolon",
+    @"-P",
+    @"--outputPipe",
+    @"-D",
+    @"--outputDoubleQuoute",
     @"-Q",
-    @"--Quoute",
+    @"--outputquoute",
 };
 
 pub fn main() !void {
@@ -46,12 +60,20 @@ pub fn main() !void {
             }) {
                 .@"-h", .@"--help" => try printUsage(std.io.getStdOut(), true),
                 .@"-v", .@"--version" => try printVersion(),
-                .@"-T", .@"--tab" => options.separator = '\t',
-                .@"-C", .@"--comma" => options.separator = ',',
-                .@"-S", .@"--semicolon" => options.separator = ';',
-                .@"-P", .@"--pipe" => options.separator = '|',
-                .@"-D", .@"--doubleQuoute" => options.quoute = '"',
-                .@"-Q", .@"--Quoute" => options.quoute = '\'',
+
+                .@"-t", .@"--tab" => options.input_separator = '\t',
+                .@"-c", .@"--comma" => options.input_separator = ',',
+                .@"-s", .@"--semicolon" => options.input_separator = ';',
+                .@"-p", .@"--pipe" => options.input_separator = '|',
+                .@"-d", .@"--doubleQuoute" => options.input_quoute = '"',
+                .@"-q", .@"--quoute" => options.input_quoute = '\'',
+
+                .@"-T", .@"--outputTab" => options.output_separator = '\t',
+                .@"-C", .@"--outputComma" => options.output_separator = ',',
+                .@"-S", .@"--outputSemicolon" => options.output_separator = ';',
+                .@"-P", .@"--outputPipe" => options.output_separator = '|',
+                .@"-D", .@"--outputDoubleQuoute" => options.output_quoute = '"',
+                .@"-Q", .@"--outputquoute" => options.output_quoute = '\'',
             }
         } else if (arg[0] == '-' and arg.len == 1) {
             try proccessFile(std.io.getStdIn().reader(), std.io.getStdOut().writer(), options, gpa);
@@ -100,16 +122,31 @@ fn proccessFile(reader: std.fs.File.Reader, writer: std.fs.File.Writer, options:
     var buffered_reader = std.io.bufferedReader(reader);
     var buffered_writer = std.io.bufferedWriter(writer);
     var buffer: [1024]u8 = undefined;
-    var parser = try csvline.Parser.init(allocator, .{});
+    var parser = try csvline.Parser.init(allocator, .{ .separator = options.input_separator, .quoute = options.input_quoute });
     defer parser.free();
-    _ = options;
-    std.log.debug("before\n", .{});
+
+    const outputSeparator: [1]u8 = .{options.output_separator};
+
+    var outputQuoute: [1]u8 = undefined;
+    if (options.output_quoute != null) {
+        outputQuoute[0] = options.output_quoute.?;
+    }
+
     while (try buffered_reader.reader().readUntilDelimiterOrEof(&buffer, '\n')) |line| {
-        for (try parser.parse(line)) |field| {
+        for (try parser.parse(line), 0..) |field, index| {
+            if (options.output_quoute != null) {
+                _ = try buffered_writer.write(&outputQuoute);
+            }
             _ = try buffered_writer.write(field);
-            _ = try buffered_writer.write("\t");
+            if (options.output_quoute != null) {
+                _ = try buffered_writer.write(&outputQuoute);
+            }
+            if (index < line.len) {
+                _ = try buffered_writer.write(&outputSeparator);
+            }
         }
         _ = try buffered_writer.write("\n");
     }
+
     try buffered_writer.flush();
 }

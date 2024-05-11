@@ -4,7 +4,23 @@ filter csv files by column name(s)
 With no FILE, or when FILE is -, read standard input.
 
 Options:
-        -T, --show-tabs         display TAB characters as ^I
-            --help              display this help and exit
-            --version           display version/licence and exit
+        -h, --help               display this help and exit
+        -v, --version            display version/licence and exit
+    
+    input:
+        -t, --tab                use tab (\t) as a field separator
+        -c, --comma              use comma (,) as a field separator (default)
+        -s, --semicolon          use semicolon (;) as a field separator
+        -p, --pipe               use pipe (|) as a field separator
+        -d, --doubleQuoute       use double quoute (") for quouteing
+        -q, --quoute             use single quoute (') for quouteing
+        -n, --noQuote            dont use quoting (default)
 
+    output:
+        -T, --outputTab          use tab (\t) as output field separator
+        -C, --outputComma        use comma (,') as output field separator (default)
+        -S, --outputSemicolon    use semicolon (;') as output field separator
+        -P, --outputPipe         use pipe (|') as output field separator
+        -D, --outputDoubleQuoute use double quoute (") for output quouteing
+        -Q, --outputQuoute       use single quoute (') for output quouteing
+        -N, --outputNoQuote      dont use output quoting (default)

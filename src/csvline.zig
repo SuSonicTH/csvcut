@@ -28,13 +28,11 @@ pub const Parser = struct {
     allocator: std.mem.Allocator,
     options: Options,
     fields: [][]const u8,
-    reserved: usize,
 
     pub fn init(allocator: std.mem.Allocator, options: Options) !Parser {
         return .{
             .allocator = allocator,
             .options = options,
-            .reserved = options.fields,
             .fields = try allocator.alloc([]const u8, options.fields),
         };
     }
@@ -76,8 +74,6 @@ pub const Parser = struct {
     }
 
     fn start_of_quouted_string(line: []const u8, start: usize, quoute: ?u8) ?usize {
-        if (quoute == null) return null;
-
         var pos = start;
         while (pos < line.len and line[pos] == ' ') {
             pos += 1;
@@ -99,9 +95,8 @@ pub const Parser = struct {
     }
 
     fn add_field(self: *Parser, field: []const u8, index: usize) !void {
-        if (index >= self.reserved) {
-            self.reserved *= 2;
-            self.fields = try self.allocator.realloc(self.fields, self.reserved);
+        if (index >= self.fields.len) {
+            self.fields = try self.allocator.realloc(self.fields, self.fields.len * 2);
         }
         self.fields[index] = field;
     }
@@ -193,6 +188,12 @@ test "basic quouted parsing - spaces outside fields" {
     var parser: Parser = try Parser.init(hpa, .{ .quoute = Quoute.single });
     defer parser.free();
     try expectEqualStringsArray(&[_][]const u8{ "1", "2", "3" }, try parser.parse("   '1','2' , '3'    "));
+}
+
+test "quouted field with escaped quoutes" {
+    var parser: Parser = try Parser.init(hpa, .{ .quoute = Quoute.single });
+    defer parser.free();
+    try expectEqualStringsArray(&[_][]const u8{ "1", "2 'two'", "3" }, try parser.parse("'1','2 ''two''' ,'3'"));
 }
 
 test "quouted parsing - expect error for non closed quoute" {
