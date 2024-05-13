@@ -8,6 +8,8 @@ const Options = struct {
     input_quoute: ?u8 = null,
     output_separator: u8 = ',',
     output_quoute: ?u8 = null,
+    fields: ?[]u8 = null,
+    indices: ?[]u8 = null,
 };
 
 const Arguments = enum {
@@ -39,6 +41,10 @@ const Arguments = enum {
     @"--outputDoubleQuoute",
     @"-Q",
     @"--outputquoute",
+    @"-F",
+    @"--fields",
+    @"-I",
+    @"--indices",
 };
 
 pub fn main() !void {
@@ -53,8 +59,11 @@ pub fn main() !void {
         try noArgumentError();
     }
 
-    for (args[1..]) |arg| {
-        if (arg[0] == '-' and arg.len > 1) {
+    var skip_next: bool = false;
+    for (args[1..], 1..) |arg, index| {
+        if (skip_next) {
+            skip_next = false;
+        } else if (arg[0] == '-' and arg.len > 1) {
             switch (std.meta.stringToEnum(Arguments, arg) orelse {
                 try argumentError(arg);
             }) {
@@ -74,6 +83,15 @@ pub fn main() !void {
                 .@"-P", .@"--outputPipe" => options.output_separator = '|',
                 .@"-D", .@"--outputDoubleQuoute" => options.output_quoute = '"',
                 .@"-Q", .@"--outputquoute" => options.output_quoute = '\'',
+
+                .@"-F", .@"--fields" => {
+                    options.fields = args[index + 1];
+                    skip_next = true;
+                },
+                .@"-I", .@"--indices" => {
+                    options.indices = args[index + 1];
+                    skip_next = true;
+                },
             }
         } else if (arg[0] == '-' and arg.len == 1) {
             try proccessFile(std.io.getStdIn().reader(), std.io.getStdOut().writer(), options, gpa);
@@ -134,15 +152,15 @@ fn proccessFile(reader: std.fs.File.Reader, writer: std.fs.File.Writer, options:
 
     while (try buffered_reader.reader().readUntilDelimiterOrEof(&buffer, '\n')) |line| {
         for (try parser.parse(line), 0..) |field, index| {
+            if (index > 0) {
+                _ = try buffered_writer.write(&outputSeparator);
+            }
             if (options.output_quoute != null) {
                 _ = try buffered_writer.write(&outputQuoute);
             }
             _ = try buffered_writer.write(field);
             if (options.output_quoute != null) {
                 _ = try buffered_writer.write(&outputQuoute);
-            }
-            if (index < line.len) {
-                _ = try buffered_writer.write(&outputSeparator);
             }
         }
         _ = try buffered_writer.write("\n");
