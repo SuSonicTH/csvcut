@@ -29,6 +29,8 @@ const Arguments = enum {
     @"--doubleQuoute",
     @"-q",
     @"--quoute",
+    @"-n",
+    @"--noQuote",
     @"-T",
     @"--outputTab",
     @"-C",
@@ -41,6 +43,8 @@ const Arguments = enum {
     @"--outputDoubleQuoute",
     @"-Q",
     @"--outputquoute",
+    @"-N",
+    @"--outputNoQuote",
     @"-F",
     @"--fields",
     @"-I",
@@ -76,14 +80,14 @@ pub fn main() !void {
                 .@"-p", .@"--pipe" => options.input_separator = '|',
                 .@"-d", .@"--doubleQuoute" => options.input_quoute = '"',
                 .@"-q", .@"--quoute" => options.input_quoute = '\'',
-
+                .@"-n", .@"--noQuote" => options.input_quoute = null,
                 .@"-T", .@"--outputTab" => options.output_separator = '\t',
                 .@"-C", .@"--outputComma" => options.output_separator = ',',
                 .@"-S", .@"--outputSemicolon" => options.output_separator = ';',
                 .@"-P", .@"--outputPipe" => options.output_separator = '|',
                 .@"-D", .@"--outputDoubleQuoute" => options.output_quoute = '"',
                 .@"-Q", .@"--outputquoute" => options.output_quoute = '\'',
-
+                .@"-N", .@"--outputNoQuote" => options.output_quoute = null,
                 .@"-F", .@"--fields" => {
                     options.fields = args[index + 1];
                     skip_next = true;
@@ -165,6 +169,5 @@ fn proccessFile(reader: std.fs.File.Reader, writer: std.fs.File.Writer, options:
         }
         _ = try buffered_writer.write("\n");
     }
-
     try buffered_writer.flush();
 }
