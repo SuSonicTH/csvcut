@@ -1,5 +1,13 @@
 const std = @import("std");
 
+const LineReaderError = error{
+    OptionError,
+};
+pub const Options = struct {
+    size: usize = 4096,
+    includeEof: bool = false,
+};
+
 pub const LineReader = struct {
     reader: std.fs.File.Reader,
     allocator: std.mem.Allocator,
@@ -10,9 +18,13 @@ pub const LineReader = struct {
     next: usize = 0,
     end: usize = 0,
     eof: bool = false,
+    includeEof: bool,
 
-    pub fn init(reader: std.fs.File.Reader, allocator: std.mem.Allocator, size: usize) !LineReader {
-        var read_size: usize = size;
+    pub fn init(reader: std.fs.File.Reader, allocator: std.mem.Allocator, options: Options) !LineReader {
+        if (options.size == 0) {
+            return LineReaderError.OptionError;
+        }
+        var read_size: usize = options.size;
         if (read_size == 0) {
             read_size = 4096;
         }
@@ -23,6 +35,7 @@ pub const LineReader = struct {
             .size = alloc_size,
             .read_size = read_size,
             .buffer = try allocator.alloc(u8, alloc_size),
+            .includeEof = options.includeEof,
         };
         errdefer free(&line_reader);
         _ = try line_reader.fill_buffer();
@@ -47,7 +60,6 @@ pub const LineReader = struct {
             const current = self.buffer[self.start + pos];
             if (current == '\r' or current == '\n') {
                 //todo: handle \r\n
-                pos += 1;
                 break;
             }
             pos += 1;
@@ -97,7 +109,7 @@ test "init" {
     const file = try open_file("src/test.csv");
     defer file.close();
 
-    var line_reader = try LineReader.init(file.reader(), hpa, 30);
+    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30 });
     defer line_reader.free();
 
     try testing.expectEqual(0, line_reader.start);
@@ -112,7 +124,7 @@ test "read lines all in buffer" {
     const file = try open_file("src/test.csv");
     defer file.close();
 
-    var line_reader = try LineReader.init(file.reader(), hpa, 30);
+    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30 });
     defer line_reader.free();
 
     try testing.expectEqualStrings("ONE,TWO,THREE", (try line_reader.read_line()).?);
@@ -125,7 +137,7 @@ test "read lines partial lines in buffer" {
     const file = try open_file("src/test.csv");
     defer file.close();
 
-    var line_reader = try LineReader.init(file.reader(), hpa, 1);
+    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 1 });
     defer line_reader.free();
 
     try testing.expectEqualStrings("ONE,TWO,THREE", (try line_reader.read_line()).?);
