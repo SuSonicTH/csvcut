@@ -1,5 +1,6 @@
 const std = @import("std");
 const csvline = @import("csvline.zig");
+const LineReader = @import("linereader.zig").LineReader;
 
 const version = "csvcut v0.1\n\n";
 
@@ -141,9 +142,7 @@ fn processFileByName(name: []const u8, options: Options, allocator: std.mem.Allo
 }
 
 fn proccessFile(reader: std.fs.File.Reader, writer: std.fs.File.Writer, options: Options, allocator: std.mem.Allocator) !void {
-    var buffered_reader = std.io.bufferedReader(reader);
     var buffered_writer = std.io.bufferedWriter(writer);
-    var buffer: [1024]u8 = undefined;
     var parser = try csvline.Parser.init(allocator, .{ .separator = options.input_separator, .quoute = options.input_quoute });
     defer parser.free();
 
@@ -154,7 +153,8 @@ fn proccessFile(reader: std.fs.File.Reader, writer: std.fs.File.Writer, options:
         outputQuoute[0] = options.output_quoute.?;
     }
 
-    while (try buffered_reader.reader().readUntilDelimiterOrEof(&buffer, '\n')) |line| {
+    var line_reader = try LineReader.init(reader, allocator, .{});
+    while (try line_reader.read_line()) |line| {
         for (try parser.parse(line), 0..) |field, index| {
             if (index > 0) {
                 _ = try buffered_writer.write(&outputSeparator);
