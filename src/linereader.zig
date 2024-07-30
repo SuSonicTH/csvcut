@@ -49,15 +49,18 @@ pub const LineReader = struct {
     pub fn read_line(self: *LineReader) !?[]const u8 {
         var pos: usize = 0;
         self.start = self.next;
-
+        var window = self.buffer[self.start..self.end];
         while (true) {
-            if (self.start + pos + 1 >= self.end and try self.fill_buffer() == 0) {
-                if (pos == 0) {
-                    return null;
+            if (pos == window.len) {
+                if (try self.fill_buffer() == 0) {
+                    if (pos == 0) {
+                        return null;
+                    }
+                    break;
                 }
-                break;
+                window = self.buffer[self.start..self.end];
             }
-            const current = self.buffer[self.start + pos];
+            const current = window[pos];
             if (current == '\r' or current == '\n') {
                 //todo: handle \r\n
                 break;
@@ -144,5 +147,5 @@ test "read lines partial lines in buffer" {
     try testing.expectEqualStrings("1,2,3", (try line_reader.read_line()).?);
     try testing.expectEqualStrings("4,5,6", (try line_reader.read_line()).?);
     try testing.expectEqual(null, try line_reader.read_line());
-    try testing.expectEqual(15, line_reader.size);
+    try testing.expectEqual(14, line_reader.size);
 }
