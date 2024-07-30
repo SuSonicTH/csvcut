@@ -184,3 +184,7 @@ fn proccessFile(reader: std.fs.File.Reader, writer: std.fs.File.Writer, options:
     }
     try buffered_writer.flush();
 }
+
+test {
+    std.testing.refAllDecls(@This());
+}

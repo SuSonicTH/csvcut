@@ -114,6 +114,82 @@ pub const LineReader = struct {
     }
 };
 
+test "init" {
+    try test_init();
+    const file = try open_file("test/test_lf.csv");
+    defer file.close();
+
+    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30 });
+    defer line_reader.free();
+
+    try testing.expectEqual(0, line_reader.start);
+    try testing.expectEqual(26, line_reader.end);
+    try testing.expectEqual(30, line_reader.read_size);
+    try testing.expectEqual(60, line_reader.size);
+
+    try testing.expectEqualStrings(test_lf_csv, line_reader.buffer[line_reader.start..line_reader.end]);
+}
+
+fn expectLinesMatching(line_reader: *LineReader) !void {
+    try testing.expectEqualStrings("ONE,TWO,THREE", (try line_reader.read_line()).?);
+    try testing.expectEqualStrings("1,2,3", (try line_reader.read_line()).?);
+    try testing.expectEqualStrings("4,5,6", (try line_reader.read_line()).?);
+    try testing.expectEqual(null, try line_reader.read_line());
+}
+
+test "read lines all in buffer" {
+    try test_init();
+    const file = try open_file("test/test_lf.csv");
+    defer file.close();
+
+    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30 });
+    defer line_reader.free();
+    try expectLinesMatching(&line_reader);
+}
+
+test "read lines partial lines in buffer" {
+    try test_init();
+    const file = try open_file("test/test_lf.csv");
+    defer file.close();
+
+    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 1 });
+    defer line_reader.free();
+
+    try expectLinesMatching(&line_reader);
+    try testing.expectEqual(null, try line_reader.read_line());
+    try testing.expectEqual(14, line_reader.size);
+}
+
+test "read lines no last eol" {
+    try test_init();
+    const file = try open_file("test/test_lf_no_last.csv");
+    defer file.close();
+
+    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30 });
+    defer line_reader.free();
+    try expectLinesMatching(&line_reader);
+}
+
+test "read lines with cr as eol" {
+    try test_init();
+    const file = try open_file("test/test_cr.csv");
+    defer file.close();
+
+    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30 });
+    defer line_reader.free();
+    try expectLinesMatching(&line_reader);
+}
+
+test "read lines with crlf as eol" {
+    try test_init();
+    const file = try open_file("test/test_cr_lf.csv");
+    defer file.close();
+
+    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30 });
+    defer line_reader.free();
+    try expectLinesMatching(&line_reader);
+}
+
 const hpa = std.heap.page_allocator;
 const testing = std.testing;
 const test_lf_csv =
@@ -157,80 +233,4 @@ fn test_init() !void {
         try write_file("test/test_cr_lf.csv", test_cr_lf_csv);
         try write_file("test/test_lf_no_last.csv", test_lf_no_last_csv);
     }
-}
-
-test "init" {
-    try test_init();
-    const file = try open_file("test/test_lf.csv");
-    defer file.close();
-
-    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30 });
-    defer line_reader.free();
-
-    try testing.expectEqual(0, line_reader.start);
-    try testing.expectEqual(26, line_reader.end);
-    try testing.expectEqual(30, line_reader.read_size);
-    try testing.expectEqual(60, line_reader.size);
-
-    try testing.expectEqualStrings(test_lf_csv, line_reader.buffer[line_reader.start..line_reader.end]);
-}
-
-fn expectLines(line_reader: *LineReader) !void {
-    try testing.expectEqualStrings("ONE,TWO,THREE", (try line_reader.read_line()).?);
-    try testing.expectEqualStrings("1,2,3", (try line_reader.read_line()).?);
-    try testing.expectEqualStrings("4,5,6", (try line_reader.read_line()).?);
-    try testing.expectEqual(null, try line_reader.read_line());
-}
-
-test "read lines all in buffer" {
-    try test_init();
-    const file = try open_file("test/test_lf.csv");
-    defer file.close();
-
-    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30 });
-    defer line_reader.free();
-    try expectLines(&line_reader);
-}
-
-test "read lines partial lines in buffer" {
-    try test_init();
-    const file = try open_file("test/test_lf.csv");
-    defer file.close();
-
-    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 1 });
-    defer line_reader.free();
-
-    try expectLines(&line_reader);
-    try testing.expectEqual(null, try line_reader.read_line());
-    try testing.expectEqual(14, line_reader.size);
-}
-
-test "read lines no last eol" {
-    try test_init();
-    const file = try open_file("test/test_lf_no_last.csv");
-    defer file.close();
-
-    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30 });
-    defer line_reader.free();
-    try expectLines(&line_reader);
-}
-
-test "read lines with cr as eol" {
-    try test_init();
-    const file = try open_file("test/test_cr.csv");
-    defer file.close();
-
-    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30 });
-    defer line_reader.free();
-    try expectLines(&line_reader);
-}
-
-test "read lines with crlf as eol" {
-    try test_init();
-    const file = try open_file("test/test_cr_lf.csv");
-    defer file.close();
-
-    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30 });
-    defer line_reader.free();
-    try expectLines(&line_reader);
 }
