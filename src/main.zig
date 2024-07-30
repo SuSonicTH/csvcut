@@ -154,20 +154,33 @@ fn proccessFile(reader: std.fs.File.Reader, writer: std.fs.File.Writer, options:
     }
 
     var line_reader = try LineReader.init(reader, allocator, .{});
-    while (try line_reader.read_line()) |line| {
-        for (try parser.parse(line), 0..) |field, index| {
-            if (index > 0) {
+
+    if (options.output_quoute == null) {
+        while (try line_reader.read_line()) |line| {
+            const fields = try parser.parse(line);
+            _ = try buffered_writer.write(fields[0]);
+            for (fields[1..]) |field| {
                 _ = try buffered_writer.write(&outputSeparator);
+                _ = try buffered_writer.write(field);
             }
-            if (options.output_quoute != null) {
-                _ = try buffered_writer.write(&outputQuoute);
-            }
-            _ = try buffered_writer.write(field);
-            if (options.output_quoute != null) {
-                _ = try buffered_writer.write(&outputQuoute);
-            }
+            _ = try buffered_writer.write("\n");
         }
-        _ = try buffered_writer.write("\n");
+    } else {
+        while (try line_reader.read_line()) |line| {
+            for (try parser.parse(line), 0..) |field, index| {
+                if (index > 0) {
+                    _ = try buffered_writer.write(&outputSeparator);
+                }
+                if (options.output_quoute != null) {
+                    _ = try buffered_writer.write(&outputQuoute);
+                }
+                _ = try buffered_writer.write(field);
+                if (options.output_quoute != null) {
+                    _ = try buffered_writer.write(&outputQuoute);
+                }
+            }
+            _ = try buffered_writer.write("\n");
+        }
     }
     try buffered_writer.flush();
 }
