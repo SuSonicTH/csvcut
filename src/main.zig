@@ -1,6 +1,7 @@
 const std = @import("std");
-const csvline = @import("csvline.zig");
-const LineReader = @import("linereader.zig").LineReader;
+const LineReader = @import("LineReader").LineReader;
+const MemMappedLineReader = @import("LineReader").MemMappedLineReader;
+const CsvLine = @import("CsvLine").CsvLine;
 
 const version = "csvcut v0.1\n\n";
 
@@ -52,6 +53,8 @@ const Arguments = enum {
     @"--indices",
 };
 
+const hpa = std.heap.page_allocator;
+
 pub fn main() !void {
     var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
     const gpa = general_purpose_allocator.allocator();
@@ -99,7 +102,9 @@ pub fn main() !void {
                 },
             }
         } else if (arg[0] == '-' and arg.len == 1) {
-            try proccessFile(std.io.getStdIn().reader(), std.io.getStdOut().writer(), options, gpa);
+            var lineReader = try LineReader.init(std.io.getStdIn().reader(), hpa, .{});
+            defer lineReader.deinit();
+            try proccessFile(&lineReader, std.io.getStdOut().writer(), options, gpa);
         } else {
             try processFileByName(arg, options, gpa);
         }
@@ -137,14 +142,16 @@ fn processFileByName(name: []const u8, options: Options, allocator: std.mem.Allo
     const path = try std.fs.realpath(name, &path_buffer);
     const file = try std.fs.openFileAbsolute(path, .{});
     defer file.close();
+    var lineReader = try MemMappedLineReader.init(file, .{});
+    defer lineReader.deinit();
 
-    try proccessFile(file.reader(), std.io.getStdOut().writer(), options, allocator);
+    try proccessFile(&lineReader, std.io.getStdOut().writer(), options, allocator);
 }
 
-fn proccessFile(reader: std.fs.File.Reader, writer: std.fs.File.Writer, options: Options, allocator: std.mem.Allocator) !void {
+fn proccessFile(lineReader: anytype, writer: std.fs.File.Writer, options: Options, allocator: std.mem.Allocator) !void {
     var buffered_writer = std.io.bufferedWriter(writer);
-    var parser = try csvline.Parser.init(allocator, .{ .separator = options.input_separator, .quoute = options.input_quoute });
-    defer parser.free();
+    var csvLine = try CsvLine.init(allocator, .{ .separator = options.input_separator, .quoute = options.input_quoute });
+    defer csvLine.free();
 
     const outputSeparator: [1]u8 = .{options.output_separator};
 
@@ -153,11 +160,9 @@ fn proccessFile(reader: std.fs.File.Reader, writer: std.fs.File.Writer, options:
         outputQuoute[0] = options.output_quoute.?;
     }
 
-    var line_reader = try LineReader.init(reader, allocator, .{});
-
     if (options.output_quoute == null) {
-        while (try line_reader.read_line()) |line| {
-            const fields = try parser.parse(line);
+        while (try lineReader.readLine()) |line| {
+            const fields = try csvLine.parse(line);
             _ = try buffered_writer.write(fields[0]);
             for (fields[1..]) |field| {
                 _ = try buffered_writer.write(&outputSeparator);
@@ -166,8 +171,8 @@ fn proccessFile(reader: std.fs.File.Reader, writer: std.fs.File.Writer, options:
             _ = try buffered_writer.write("\n");
         }
     } else {
-        while (try line_reader.read_line()) |line| {
-            for (try parser.parse(line), 0..) |field, index| {
+        while (try lineReader.readLine()) |line| {
+            for (try csvLine.parse(line), 0..) |field, index| {
                 if (index > 0) {
                     _ = try buffered_writer.write(&outputSeparator);
                 }

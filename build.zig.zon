@@ -1,0 +1,22 @@
+.{
+    .name = "csvcut",
+    .version = "0.1.0",
+
+    .dependencies = .{
+        .CsvLine = .{
+            .url = "https://github.com/SuSonicTH/zigCsvLine/archive/00874f0094448b2cedd135eae3d447a0d7967629.tar.gz",
+            .hash = "1220d980ff9834254197e6ebf1a52498b63031e6928b8ca8b17780b3a911fe79d75b",
+        },
+        .LineReader = .{
+            .url = "https://github.com/SuSonicTH/zigLineReader/archive/6104cd2b8ca15285fa81b549042af183e87ee6f8.tar.gz",
+            .hash = "12208a835dc1a136f93e13ecc37c2ff4c718df6699db9d174b1c8e02c4aabf1c4912",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "LICENSE",
+        "README.md",
+    },
+}
