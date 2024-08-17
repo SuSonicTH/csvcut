@@ -104,7 +104,7 @@ pub fn main() !void {
         } else if (arg[0] == '-' and arg.len == 1) {
             var lineReader = try LineReader.init(std.io.getStdIn().reader(), hpa, .{});
             defer lineReader.deinit();
-            try proccessFile(&lineReader, std.io.getStdOut().writer(), options, gpa);
+            try proccessFile(&lineReader, std.io.getStdOut(), options, gpa);
         } else {
             try processFileByName(arg, options, gpa);
         }
@@ -145,49 +145,33 @@ fn processFileByName(name: []const u8, options: Options, allocator: std.mem.Allo
     var lineReader = try MemMappedLineReader.init(file, .{});
     defer lineReader.deinit();
 
-    try proccessFile(&lineReader, std.io.getStdOut().writer(), options, allocator);
+    try proccessFile(&lineReader, std.io.getStdOut(), options, allocator);
 }
 
-fn proccessFile(lineReader: anytype, writer: std.fs.File.Writer, options: Options, allocator: std.mem.Allocator) !void {
-    var buffered_writer = std.io.bufferedWriter(writer);
+fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: Options, allocator: std.mem.Allocator) !void {
+    var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
     var csvLine = try CsvLine.init(allocator, .{ .separator = options.input_separator, .quoute = options.input_quoute });
     defer csvLine.free();
 
     const outputSeparator: [1]u8 = .{options.output_separator};
+    const outputQuoute: [1]u8 = .{options.output_quoute.?};
 
-    var outputQuoute: [1]u8 = undefined;
-    if (options.output_quoute != null) {
-        outputQuoute[0] = options.output_quoute.?;
-    }
-
-    if (options.output_quoute == null) {
-        while (try lineReader.readLine()) |line| {
-            const fields = try csvLine.parse(line);
-            _ = try buffered_writer.write(fields[0]);
-            for (fields[1..]) |field| {
-                _ = try buffered_writer.write(&outputSeparator);
-                _ = try buffered_writer.write(field);
+    while (try lineReader.readLine()) |line| {
+        for (try csvLine.parse(line), 0..) |field, index| {
+            if (index > 0) {
+                _ = try bufferedWriter.write(&outputSeparator);
             }
-            _ = try buffered_writer.write("\n");
-        }
-    } else {
-        while (try lineReader.readLine()) |line| {
-            for (try csvLine.parse(line), 0..) |field, index| {
-                if (index > 0) {
-                    _ = try buffered_writer.write(&outputSeparator);
-                }
-                if (options.output_quoute != null) {
-                    _ = try buffered_writer.write(&outputQuoute);
-                }
-                _ = try buffered_writer.write(field);
-                if (options.output_quoute != null) {
-                    _ = try buffered_writer.write(&outputQuoute);
-                }
+            if (options.output_quoute != null) {
+                _ = try bufferedWriter.write(&outputQuoute);
             }
-            _ = try buffered_writer.write("\n");
+            _ = try bufferedWriter.write(field);
+            if (options.output_quoute != null) {
+                _ = try bufferedWriter.write(&outputQuoute);
+            }
         }
+        _ = try bufferedWriter.write("\n");
     }
-    try buffered_writer.flush();
+    try bufferedWriter.flush();
 }
 
 test {
