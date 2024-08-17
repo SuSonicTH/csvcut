@@ -143,6 +143,7 @@ fn processFileByName(name: []const u8, options: Options, allocator: std.mem.Allo
     const file = try std.fs.openFileAbsolute(path, .{});
     defer file.close();
     var lineReader = try MemMappedLineReader.init(file, .{});
+    //var lineReader = try LineReader.init(file.reader(), allocator, .{});
     defer lineReader.deinit();
 
     try proccessFile(&lineReader, std.io.getStdOut(), options, allocator);
