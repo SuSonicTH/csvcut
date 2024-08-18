@@ -157,20 +157,46 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: Options, 
     const outputSeparator: [1]u8 = .{options.output_separator};
     const outputQuoute: [1]u8 = .{options.output_quoute.?};
 
-    while (try lineReader.readLine()) |line| {
-        for (try csvLine.parse(line), 0..) |field, index| {
-            if (index > 0) {
-                _ = try bufferedWriter.write(&outputSeparator);
-            }
-            if (options.output_quoute != null) {
-                _ = try bufferedWriter.write(&outputQuoute);
-            }
-            _ = try bufferedWriter.write(field);
-            if (options.output_quoute != null) {
-                _ = try bufferedWriter.write(&outputQuoute);
-            }
+    if (options.indices != null) {
+        var indicesParser = try CsvLine.init(allocator, .{ .separator = options.input_separator, .quoute = options.input_quoute });
+        defer indicesParser.free();
+        const indices = try indicesParser.parse(options.indices.?);
+        var idx: []usize = try allocator.alloc(usize, indices.len);
+        for (indices, 0..) |field, index| {
+            idx[index] = (try std.fmt.parseInt(usize, field, 10)) - 1;
         }
-        _ = try bufferedWriter.write("\n");
+        while (try lineReader.readLine()) |line| {
+            const fields = try csvLine.parse(line);
+            for (idx, 0..) |field, index| {
+                if (index > 0) {
+                    _ = try bufferedWriter.write(&outputSeparator);
+                }
+                if (options.output_quoute != null) {
+                    _ = try bufferedWriter.write(&outputQuoute);
+                }
+                _ = try bufferedWriter.write(fields[field]);
+                if (options.output_quoute != null) {
+                    _ = try bufferedWriter.write(&outputQuoute);
+                }
+            }
+            _ = try bufferedWriter.write("\n");
+        }
+    } else {
+        while (try lineReader.readLine()) |line| {
+            for (try csvLine.parse(line), 0..) |field, index| {
+                if (index > 0) {
+                    _ = try bufferedWriter.write(&outputSeparator);
+                }
+                if (options.output_quoute != null) {
+                    _ = try bufferedWriter.write(&outputQuoute);
+                }
+                _ = try bufferedWriter.write(field);
+                if (options.output_quoute != null) {
+                    _ = try bufferedWriter.write(&outputQuoute);
+                }
+            }
+            _ = try bufferedWriter.write("\n");
+        }
     }
     try bufferedWriter.flush();
 }
