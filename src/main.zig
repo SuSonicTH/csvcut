@@ -61,7 +61,7 @@ const Options = struct {
     }
 
     fn setSelectionIndices(self: *Options) !void {
-        if (self.header == null or self.selectionIndices != null) return;
+        if (self.selectedFields == null or self.selectionIndices != null) return;
         self.selectionIndices = try self.allocator.alloc(usize, self.selectedFields.?.items.len);
 
         for (self.selectedFields.?.items, 0..) |item, i| {
@@ -212,10 +212,8 @@ fn argumentError(arg: []u8) !noreturn {
     std.process.exit(1);
 }
 
-fn processFileByName(name: []const u8, options: Options, allocator: std.mem.Allocator) !void {
-    var path_buffer: [std.fs.MAX_PATH_BYTES]u8 = undefined;
-    const path = try std.fs.realpath(name, &path_buffer);
-    const file = try std.fs.openFileAbsolute(path, .{});
+fn processFileByName(fileName: []const u8, options: Options, allocator: std.mem.Allocator) !void {
+    const file = try std.fs.cwd().openFile(fileName, .{});
     defer file.close();
     var lineReader = try MemMappedLineReader.init(file, .{});
     //var lineReader = try LineReader.init(file.reader(), allocator, .{});
