@@ -20,13 +20,12 @@ const OptionError = error{NoSuchField};
 const Options = struct {
     csvLine: CsvLine,
     allocator: std.mem.Allocator,
-    input_separator: u8 = ',',
-    input_quoute: ?u8 = null,
-    output_separator: u8 = ',',
-    output_quoute: ?u8 = null,
+    input_separator: [1]u8 = .{','},
+    input_quoute: ?[1]u8 = null,
+    output_separator: [1]u8 = .{','},
+    output_quoute: ?[1]u8 = null,
     fileHeader: bool = true,
-    header: ?[]const u8 = null,
-    headerFields: ?[][]const u8 = null,
+    header: ?[][]const u8 = null,
     selectedFields: ?std.ArrayList(Selection) = null,
     selectionIndices: ?[]usize = null,
 
@@ -41,12 +40,14 @@ const Options = struct {
         if (self.selectedFields) |selectedFields| {
             selectedFields.deinit();
         }
+        if (self.header) |header| {
+            self.allocator.free(header);
+        }
         self.csvLine.free();
     }
 
-    fn setHeader(self: *Options, fields: []u8) !void {
-        self.header = try self.allocator.dupe(u8, fields);
-        self.headerFields = try self.csvLine.parse(self.header.?);
+    fn setHeader(self: *Options, header: []u8) !void {
+        self.header = try self.allocator.dupe([]const u8, try self.csvLine.parse(header));
         self.fileHeader = false;
     }
 
@@ -59,9 +60,8 @@ const Options = struct {
         }
     }
 
-    fn getSelectionIndices(self: *Options) !?[]usize {
-        if (self.selectedFields == null) return null;
-        if (self.selectionIndices) |selectionIndices| return selectionIndices;
+    fn setSelectionIndices(self: *Options) !void {
+        if (self.header == null or self.selectionIndices != null) return;
         self.selectionIndices = try self.allocator.alloc(usize, self.selectedFields.?.items.len);
 
         for (self.selectedFields.?.items, 0..) |item, i| {
@@ -70,11 +70,10 @@ const Options = struct {
                 .name => self.selectionIndices.?[i] = try getHeaderIndex(self, item.field),
             }
         }
-        return self.selectionIndices;
     }
 
     fn getHeaderIndex(self: *Options, search: []const u8) OptionError!usize {
-        return for (self.headerFields.?, 0..) |field, index| {
+        return for (self.header.?, 0..) |field, index| {
             if (std.mem.eql(u8, field, search)) {
                 break index;
             }
@@ -149,19 +148,19 @@ pub fn main() !void {
             }) {
                 .@"--help" => try printUsage(std.io.getStdOut(), true),
                 .@"-v", .@"--version" => try printVersion(),
-                .@"-t", .@"--tab" => options.input_separator = '\t',
-                .@"-c", .@"--comma" => options.input_separator = ',',
-                .@"-s", .@"--semicolon" => options.input_separator = ';',
-                .@"-p", .@"--pipe" => options.input_separator = '|',
-                .@"-d", .@"--doubleQuoute" => options.input_quoute = '"',
-                .@"-q", .@"--quoute" => options.input_quoute = '\'',
+                .@"-t", .@"--tab" => options.input_separator = .{'\t'},
+                .@"-c", .@"--comma" => options.input_separator = .{','},
+                .@"-s", .@"--semicolon" => options.input_separator = .{';'},
+                .@"-p", .@"--pipe" => options.input_separator = .{'|'},
+                .@"-d", .@"--doubleQuoute" => options.input_quoute = .{'"'},
+                .@"-q", .@"--quoute" => options.input_quoute = .{'\''},
                 .@"-n", .@"--noQuote" => options.input_quoute = null,
-                .@"-T", .@"--outputTab" => options.output_separator = '\t',
-                .@"-C", .@"--outputComma" => options.output_separator = ',',
-                .@"-S", .@"--outputSemicolon" => options.output_separator = ';',
-                .@"-P", .@"--outputPipe" => options.output_separator = '|',
-                .@"-D", .@"--outputDoubleQuoute" => options.output_quoute = '"',
-                .@"-Q", .@"--outputQuoute" => options.output_quoute = '\'',
+                .@"-T", .@"--outputTab" => options.output_separator = .{'\t'},
+                .@"-C", .@"--outputComma" => options.output_separator = .{','},
+                .@"-S", .@"--outputSemicolon" => options.output_separator = .{';'},
+                .@"-P", .@"--outputPipe" => options.output_separator = .{'|'},
+                .@"-D", .@"--outputDoubleQuoute" => options.output_quoute = .{'"'},
+                .@"-Q", .@"--outputQuoute" => options.output_quoute = .{'\''},
                 .@"-N", .@"--outputNoQuote" => options.output_quoute = null,
                 .@"-h", .@"--header" => {
                     try options.setHeader(args[index + 1]); //todo: check if there are more arguments -> error if not
@@ -181,12 +180,9 @@ pub fn main() !void {
             defer lineReader.deinit();
             try proccessFile(&lineReader, std.io.getStdOut(), options, allocator);
         } else {
+            try options.setSelectionIndices();
             try processFileByName(arg, options, allocator);
         }
-    }
-
-    for ((try options.getSelectionIndices()).?, 0..) |index, i| {
-        std.log.info("{d}:{d}", .{ i, index });
     }
 }
 
@@ -230,53 +226,43 @@ fn processFileByName(name: []const u8, options: Options, allocator: std.mem.Allo
 
 fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: Options, allocator: std.mem.Allocator) !void {
     var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
-    var csvLine = try CsvLine.init(allocator, .{ .separator = options.input_separator, .quoute = options.input_quoute });
+    var csvLine = try CsvLine.init(allocator, .{ .separator = options.input_separator[0], .quoute = if (options.input_quoute) |quote| quote[0] else null });
     defer csvLine.free();
 
-    const outputSeparator: [1]u8 = .{options.output_separator};
-    const outputQuoute: [1]u8 = .{options.output_quoute.?};
-
-    //if (options.indices != null) {
-    //    var indicesParser = try CsvLine.init(allocator, .{ .separator = options.input_separator, .quoute = options.input_quoute });
-    //    defer indicesParser.free();
-    //    const indices = try indicesParser.parse(options.indices.?);
-    //    var idx: []usize = try allocator.alloc(usize, indices.len);
-    //    for (indices, 0..) |field, index| {
-    //        idx[index] = (try std.fmt.parseInt(usize, field, 10)) - 1;
-    //    }
-    //    while (try lineReader.readLine()) |line| {
-    //        const fields = try csvLine.parse(line);
-    //        for (idx, 0..) |field, index| {
-    //            if (index > 0) {
-    //                _ = try bufferedWriter.write(&outputSeparator);
-    //            }
-    //            if (options.output_quoute != null) {
-    //                _ = try bufferedWriter.write(&outputQuoute);
-    //            }
-    //            _ = try bufferedWriter.write(fields[field]);
-    //            if (options.output_quoute != null) {
-    //                _ = try bufferedWriter.write(&outputQuoute);
-    //            }
-    //        }
-    //        _ = try bufferedWriter.write("\n");
-    //    }
-    //} else {
-    while (try lineReader.readLine()) |line| {
-        for (try csvLine.parse(line), 0..) |field, index| {
-            if (index > 0) {
-                _ = try bufferedWriter.write(&outputSeparator);
+    if (options.selectionIndices) |indices| {
+        while (try lineReader.readLine()) |line| {
+            const fields = try csvLine.parse(line);
+            for (indices, 0..) |field, index| {
+                if (index > 0) {
+                    _ = try bufferedWriter.write(&options.output_separator);
+                }
+                if (options.output_quoute != null) {
+                    _ = try bufferedWriter.write(&options.output_quoute.?);
+                }
+                _ = try bufferedWriter.write(fields[field]);
+                if (options.output_quoute != null) {
+                    _ = try bufferedWriter.write(&options.output_quoute.?);
+                }
             }
-            if (options.output_quoute != null) {
-                _ = try bufferedWriter.write(&outputQuoute);
-            }
-            _ = try bufferedWriter.write(field);
-            if (options.output_quoute != null) {
-                _ = try bufferedWriter.write(&outputQuoute);
-            }
+            _ = try bufferedWriter.write("\n");
         }
-        _ = try bufferedWriter.write("\n");
+    } else {
+        while (try lineReader.readLine()) |line| {
+            for (try csvLine.parse(line), 0..) |field, index| {
+                if (index > 0) {
+                    _ = try bufferedWriter.write(&options.output_separator);
+                }
+                if (options.output_quoute != null) {
+                    _ = try bufferedWriter.write(&options.output_quoute.?);
+                }
+                _ = try bufferedWriter.write(field);
+                if (options.output_quoute != null) {
+                    _ = try bufferedWriter.write(&options.output_quoute.?);
+                }
+            }
+            _ = try bufferedWriter.write("\n");
+        }
     }
-    //}
     try bufferedWriter.flush();
 }
 
