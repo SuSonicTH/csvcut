@@ -14,17 +14,23 @@ Options:
         -p, --pipe               use pipe (|) as a field separator
         -d, --doubleQuote        use double quote (") for quoting
         -q, --quote              use single quote (') for quoting
-        -n, --noQuote            don't use quoting (default)
+            --noQuote            don't use quoting (default)
+        -h, --header             use given heder (field1,field2,...)
+        -n, --noHeader           file has no header
 
     output:
-        -T, --outputTab          use tab (\t) as output field separator
-        -C, --outputComma        use comma (,') as output field separator (default)
-        -S, --outputSemicolon    use semicolon (;') as output field separator
-        -P, --outputPipe         use pipe (|') as output field separator
+        -T, --outputTab          use tab (\t) as field separator
+        -C, --outputComma        use comma (,) as field separator (default)
+        -S, --outputSemicolon    use semicolon (;) as field separator
+        -P, --outputPipe         use pipe (|) as output field separator
         -D, --outputDoubleQuote  use double quote (") for output quoting
         -Q, --outputQuote        use single quote (') for output quoting
-        -N, --outputNoQuote      don't use output quoting (default)
-
+            --outputNoQuote      don't use output quoting (default)
+        -N, --outputNoHeader     don't write header to output
+        
     processing:
-        -F, --fields             comma separated list of field names to output
-        -I, --indices            comma separated indices of fields to output
+        -F, --fields            comma separated list of field names to output
+                                can be used multiple times
+                                
+        -I, --indices           comma separated indices of fields to output
+                                can be used multiple times

@@ -4,12 +4,12 @@
 
     .dependencies = .{
         .CsvLine = .{
-            .url = "https://github.com/SuSonicTH/zigCsvLine/archive/00874f0094448b2cedd135eae3d447a0d7967629.tar.gz",
-            .hash = "1220d980ff9834254197e6ebf1a52498b63031e6928b8ca8b17780b3a911fe79d75b",
+            .url = "https://github.com/SuSonicTH/zigCsvLine/archive/9eb9ea7f11f362cf6a4232c89164f949d9bf7387.tar.gz",
+            .hash = "1220450542738bcf9c89959c84847a5672e12f058230ec55db4288763162cedd778f",
         },
         .LineReader = .{
-            .url = "https://github.com/SuSonicTH/zigLineReader/archive/6104cd2b8ca15285fa81b549042af183e87ee6f8.tar.gz",
-            .hash = "12208a835dc1a136f93e13ecc37c2ff4c718df6699db9d174b1c8e02c4aabf1c4912",
+            .url = "https://github.com/SuSonicTH/zigLineReader/archive/e1cc50c8889c463ee49cfd839b9ea72451b77599.tar.gz",
+            .hash = "122012b49b28c68f9487168a419309053f3e59077c94d8a5e1e644869c05b3f9876a",
         },
     },
     .paths = .{
