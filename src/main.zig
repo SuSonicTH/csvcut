@@ -15,7 +15,10 @@ const Selection = struct {
     field: []const u8,
 };
 
-const OptionError = error{NoSuchField};
+const OptionError = error{
+    NoSuchField,
+    NoHeader,
+};
 
 const Options = struct {
     csvLine: CsvLine,
@@ -46,7 +49,7 @@ const Options = struct {
         self.csvLine.free();
     }
 
-    fn setHeader(self: *Options, header: []u8) !void {
+    fn setHeader(self: *Options, header: []const u8) !void {
         self.header = try self.allocator.dupe([]const u8, try self.csvLine.parse(header));
         self.fileHeader = false;
     }
@@ -73,6 +76,10 @@ const Options = struct {
     }
 
     fn getHeaderIndex(self: *Options, search: []const u8) OptionError!usize {
+        if (self.header == null) {
+            return OptionError.NoHeader;
+        }
+
         return for (self.header.?, 0..) |field, index| {
             if (std.mem.eql(u8, field, search)) {
                 break index;
@@ -97,10 +104,11 @@ const Arguments = enum {
     @"--doubleQuoute",
     @"-q",
     @"--quoute",
-    @"-n",
     @"--noQuote",
     @"-h",
     @"--header",
+    @"-n",
+    @"--noHeader",
     @"-T",
     @"--outputTab",
     @"-C",
@@ -113,7 +121,6 @@ const Arguments = enum {
     @"--outputDoubleQuoute",
     @"-Q",
     @"--outputQuoute",
-    @"-N",
     @"--outputNoQuote",
     @"-F",
     @"--fields",
@@ -154,18 +161,19 @@ pub fn main() !void {
                 .@"-p", .@"--pipe" => options.input_separator = .{'|'},
                 .@"-d", .@"--doubleQuoute" => options.input_quoute = .{'"'},
                 .@"-q", .@"--quoute" => options.input_quoute = .{'\''},
-                .@"-n", .@"--noQuote" => options.input_quoute = null,
+                .@"--noQuote" => options.input_quoute = null,
                 .@"-T", .@"--outputTab" => options.output_separator = .{'\t'},
                 .@"-C", .@"--outputComma" => options.output_separator = .{','},
                 .@"-S", .@"--outputSemicolon" => options.output_separator = .{';'},
                 .@"-P", .@"--outputPipe" => options.output_separator = .{'|'},
                 .@"-D", .@"--outputDoubleQuoute" => options.output_quoute = .{'"'},
                 .@"-Q", .@"--outputQuoute" => options.output_quoute = .{'\''},
-                .@"-N", .@"--outputNoQuote" => options.output_quoute = null,
+                .@"--outputNoQuote" => options.output_quoute = null,
                 .@"-h", .@"--header" => {
                     try options.setHeader(args[index + 1]); //todo: check if there are more arguments -> error if not
                     skip_next = true;
                 },
+                .@"-n", .@"--noHeader" => options.fileHeader = false,
                 .@"-F", .@"--fields" => {
                     try options.addIndex(.name, args[index + 1]); //todo: check if there are more arguments -> error if not
                     skip_next = true;
@@ -178,10 +186,9 @@ pub fn main() !void {
         } else if (arg[0] == '-' and arg.len == 1) {
             var lineReader = try LineReader.init(std.io.getStdIn().reader(), hpa, .{});
             defer lineReader.deinit();
-            try proccessFile(&lineReader, std.io.getStdOut(), options, allocator);
+            try proccessFile(&lineReader, std.io.getStdOut(), &options, allocator);
         } else {
-            try options.setSelectionIndices();
-            try processFileByName(arg, options, allocator);
+            try processFileByName(arg, &options, allocator);
         }
     }
 }
@@ -212,7 +219,7 @@ fn argumentError(arg: []u8) !noreturn {
     std.process.exit(1);
 }
 
-fn processFileByName(fileName: []const u8, options: Options, allocator: std.mem.Allocator) !void {
+fn processFileByName(fileName: []const u8, options: *Options, allocator: std.mem.Allocator) !void {
     const file = try std.fs.cwd().openFile(fileName, .{});
     defer file.close();
     var lineReader = try MemMappedLineReader.init(file, .{});
@@ -222,10 +229,18 @@ fn processFileByName(fileName: []const u8, options: Options, allocator: std.mem.
     try proccessFile(&lineReader, std.io.getStdOut(), options, allocator);
 }
 
-fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: Options, allocator: std.mem.Allocator) !void {
+fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options, allocator: std.mem.Allocator) !void {
     var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
     var csvLine = try CsvLine.init(allocator, .{ .separator = options.input_separator[0], .quoute = if (options.input_quoute) |quote| quote[0] else null });
     defer csvLine.free();
+
+    if (options.fileHeader) {
+        if (try lineReader.readLine()) |line| {
+            try options.setHeader(line);
+        }
+    }
+
+    try options.setSelectionIndices();
 
     if (options.selectionIndices) |indices| {
         while (try lineReader.readLine()) |line| {
