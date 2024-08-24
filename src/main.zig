@@ -29,6 +29,7 @@ const Options = struct {
     output_quoute: ?[1]u8 = null,
     fileHeader: bool = true,
     header: ?[][]const u8 = null,
+    outputHeader: bool = true,
     selectedFields: ?std.ArrayList(Selection) = null,
     selectionIndices: ?[]usize = null,
 
@@ -122,6 +123,8 @@ const Arguments = enum {
     @"-Q",
     @"--outputQuoute",
     @"--outputNoQuote",
+    @"-N",
+    @"--outputNoHeader",
     @"-F",
     @"--fields",
     @"-I",
@@ -174,6 +177,7 @@ pub fn main() !void {
                     skip_next = true;
                 },
                 .@"-n", .@"--noHeader" => options.fileHeader = false,
+                .@"-N", .@"--outputNoHeader" => options.outputHeader = false,
                 .@"-F", .@"--fields" => {
                     try options.addIndex(.name, args[index + 1]); //todo: check if there are more arguments -> error if not
                     skip_next = true;
@@ -237,46 +241,56 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options,
     if (options.fileHeader) {
         if (try lineReader.readLine()) |line| {
             try options.setHeader(line);
+            if (options.outputHeader) {
+                try options.setSelectionIndices();
+                const fields = try csvLine.parse(line);
+                try writeOutput(&bufferedWriter, &fields, options);
+            }
         }
+    } else if (options.header != null and options.outputHeader) {
+        try options.setSelectionIndices();
+        try writeOutput(&bufferedWriter, &options.header.?, options);
+    } else {
+        try options.setSelectionIndices();
     }
 
-    try options.setSelectionIndices();
-
-    if (options.selectionIndices) |indices| {
-        while (try lineReader.readLine()) |line| {
-            const fields = try csvLine.parse(line);
-            for (indices, 0..) |field, index| {
-                if (index > 0) {
-                    _ = try bufferedWriter.write(&options.output_separator);
-                }
-                if (options.output_quoute != null) {
-                    _ = try bufferedWriter.write(&options.output_quoute.?);
-                }
-                _ = try bufferedWriter.write(fields[field]);
-                if (options.output_quoute != null) {
-                    _ = try bufferedWriter.write(&options.output_quoute.?);
-                }
-            }
-            _ = try bufferedWriter.write("\n");
-        }
-    } else {
-        while (try lineReader.readLine()) |line| {
-            for (try csvLine.parse(line), 0..) |field, index| {
-                if (index > 0) {
-                    _ = try bufferedWriter.write(&options.output_separator);
-                }
-                if (options.output_quoute != null) {
-                    _ = try bufferedWriter.write(&options.output_quoute.?);
-                }
-                _ = try bufferedWriter.write(field);
-                if (options.output_quoute != null) {
-                    _ = try bufferedWriter.write(&options.output_quoute.?);
-                }
-            }
-            _ = try bufferedWriter.write("\n");
-        }
+    while (try lineReader.readLine()) |line| {
+        const fields = try csvLine.parse(line);
+        try writeOutput(&bufferedWriter, &fields, options);
     }
     try bufferedWriter.flush();
+}
+
+inline fn writeOutput(bufferedWriter: anytype, fields: *const [][]const u8, options: *Options) !void {
+    if (options.selectionIndices) |indices| {
+        for (indices, 0..) |field, index| {
+            if (index > 0) {
+                _ = try bufferedWriter.write(&options.output_separator);
+            }
+            if (options.output_quoute != null) {
+                _ = try bufferedWriter.write(&options.output_quoute.?);
+            }
+            _ = try bufferedWriter.write(fields.*[field]);
+            if (options.output_quoute != null) {
+                _ = try bufferedWriter.write(&options.output_quoute.?);
+            }
+        }
+        _ = try bufferedWriter.write("\n");
+    } else {
+        for (fields.*, 0..) |field, index| {
+            if (index > 0) {
+                _ = try bufferedWriter.write(&options.output_separator);
+            }
+            if (options.output_quoute != null) {
+                _ = try bufferedWriter.write(&options.output_quoute.?);
+            }
+            _ = try bufferedWriter.write(field);
+            if (options.output_quoute != null) {
+                _ = try bufferedWriter.write(&options.output_quoute.?);
+            }
+        }
+        _ = try bufferedWriter.write("\n");
+    }
 }
 
 test {
