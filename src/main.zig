@@ -15,9 +15,16 @@ const Selection = struct {
     field: []const u8,
 };
 
+const Filter = struct {
+    field: []const u8 = undefined,
+    value: []const u8 = undefined,
+    index: usize = undefined,
+};
+
 const OptionError = error{
     NoSuchField,
     NoHeader,
+    MoreThanOneEqualInFilter,
 };
 
 const Options = struct {
@@ -33,6 +40,7 @@ const Options = struct {
     selectedFields: ?std.ArrayList(Selection) = null,
     selectionIndices: ?[]usize = null,
     trim: bool = false,
+    filterFields: ?std.ArrayList(Filter) = null,
 
     pub fn init(allocator: std.mem.Allocator) !Options {
         return .{
@@ -85,6 +93,13 @@ const Options = struct {
         }
     }
 
+    fn setFilterIndices(self: *Options) OptionError!void {
+        if (self.filterFields == null) return;
+        for (0..self.filterFields.?.items.len) |i| {
+            self.filterFields.?.items[i].index = try getHeaderIndex(self, self.filterFields.?.items[i].field);
+        }
+    }
+
     fn getHeaderIndex(self: *Options, search: []const u8) OptionError!usize {
         if (self.header == null) {
             return OptionError.NoHeader;
@@ -95,6 +110,26 @@ const Options = struct {
                 break index;
             }
         } else OptionError.NoSuchField;
+    }
+
+    fn addFilter(self: *Options, filterList: []const u8) !void {
+        if (self.filterFields == null) {
+            self.filterFields = std.ArrayList(Filter).init(self.allocator);
+        }
+        for ((try (try self.getCsvLine()).parse(filterList))) |filterString| {
+            var filter: Filter = .{};
+            var it = std.mem.split(u8, filterString, "=");
+            var i: u8 = 0;
+            while (it.next()) |value| {
+                switch (i) {
+                    0 => filter.field = value,
+                    1 => filter.value = value,
+                    else => return OptionError.MoreThanOneEqualInFilter,
+                }
+                i += 1;
+            }
+            try self.filterFields.?.append(filter);
+        }
     }
 };
 
@@ -139,6 +174,7 @@ const Arguments = enum {
     @"-I",
     @"--indices",
     @"--trim",
+    @"--filter",
 };
 
 const hpa = std.heap.page_allocator;
@@ -197,6 +233,10 @@ pub fn main() !void {
                     try options.addIndex(.index, args[index + 1]); //todo: check if there are more arguments -> error if not
                     skip_next = true;
                 },
+                .@"--filter" => {
+                    try options.addFilter(args[index + 1]);
+                    skip_next = true;
+                },
             }
         } else if (arg[0] == '-' and arg.len == 1) {
             var lineReader = try LineReader.init(std.io.getStdIn().reader(), hpa, .{});
@@ -231,7 +271,7 @@ fn noArgumentError() !noreturn {
 fn argumentError(arg: []u8) !noreturn {
     try printUsage(std.io.getStdErr(), false);
     std.log.err("argument '{s}' is unknown\n", .{arg});
-    std.process.exit(1);
+    std.process.exit(2);
 }
 
 fn processFileByName(fileName: []const u8, options: *Options, allocator: std.mem.Allocator) !void {
@@ -265,9 +305,19 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options,
         try options.setSelectionIndices();
     }
 
+    if (options.filterFields != null) {
+        try options.setFilterIndices();
+    }
+
     while (try lineReader.readLine()) |line| {
         const fields = try csvLine.parse(line);
-        try writeOutput(&bufferedWriter, &fields, options);
+        if (options.filterFields != null) {
+            if (filterMatches(fields, options.filterFields.?.items)) {
+                try writeOutput(&bufferedWriter, &fields, options);
+            }
+        } else {
+            try writeOutput(&bufferedWriter, &fields, options);
+        }
     }
     try bufferedWriter.flush();
 }
@@ -302,6 +352,15 @@ inline fn writeOutput(bufferedWriter: anytype, fields: *const [][]const u8, opti
         }
         _ = try bufferedWriter.write("\n");
     }
+}
+
+inline fn filterMatches(fields: [][]const u8, filterList: []Filter) bool {
+    for (filterList) |filter| {
+        if (!std.mem.eql(u8, fields[filter.index], filter.value)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 test {
