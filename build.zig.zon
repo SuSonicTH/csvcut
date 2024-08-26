@@ -4,8 +4,8 @@
 
     .dependencies = .{
         .CsvLine = .{
-            .url = "https://github.com/SuSonicTH/zigCsvLine/archive/9eb9ea7f11f362cf6a4232c89164f949d9bf7387.tar.gz",
-            .hash = "1220450542738bcf9c89959c84847a5672e12f058230ec55db4288763162cedd778f",
+            .url = "https://github.com/SuSonicTH/zigCsvLine/archive/ee8aed68588333cc32816b20f7b6c6d52edc3407.tar.gz",
+            .hash = "1220da417f4012f3a72079cfb622bffa8ddc3528579a04ca8493fa729c1667a7e816",
         },
         .LineReader = .{
             .url = "https://github.com/SuSonicTH/zigLineReader/archive/e1cc50c8889c463ee49cfd839b9ea72451b77599.tar.gz",
