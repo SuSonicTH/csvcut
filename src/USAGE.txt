@@ -6,7 +6,8 @@ With no FILE, or when FILE is -, read standard input.
 Options:
         -h, --help               display this help and exit
         -v, --version            display version/license and exit
-    
+        -l, --listHeader         print the file header and exit
+
     input:
         -t, --tab                use tab (\t) as a field separator
         -c, --comma              use comma (,) as a field separator (default)

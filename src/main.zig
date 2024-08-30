@@ -49,6 +49,7 @@ const Options = struct {
     trim: bool = false,
     filterFields: ?std.ArrayList(Filter) = null,
     outputFormat: OutputFormat = .Csv,
+    listHeader: bool = false,
 
     pub fn init(allocator: std.mem.Allocator) !Options {
         return .{
@@ -184,6 +185,8 @@ const Arguments = enum {
     @"--trim",
     @"--filter",
     @"--format",
+    @"-l",
+    @"--listHeader",
 };
 
 const hpa = std.heap.page_allocator;
@@ -228,6 +231,7 @@ pub fn main() !void {
                 .@"-Q", .@"--outputQuoute" => options.output_quoute = .{'\''},
                 .@"--outputNoQuote" => options.output_quoute = null,
                 .@"--trim" => options.trim = true,
+                .@"-l", .@"--listHeader" => options.listHeader = true,
                 .@"--format" => {
                     if (std.meta.stringToEnum(OutputFormat, args[index + 1])) |outputFormat| {
                         options.outputFormat = outputFormat;
@@ -308,10 +312,16 @@ fn processFileByName(fileName: []const u8, options: *Options, allocator: std.mem
 }
 
 fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options, allocator: std.mem.Allocator) !void {
-    var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
-    const writer: std.io.AnyWriter = bufferedWriter.writer().any();
     var csvLine = try CsvLine.init(allocator, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null });
     defer csvLine.free();
+
+    if (options.listHeader) {
+        try listHeader(lineReader, &csvLine);
+        return;
+    }
+
+    var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
+    const writer: std.io.AnyWriter = bufferedWriter.writer().any();
 
     const formattedWriter: FormattedWriter = switch (options.outputFormat) {
         .Csv => &writeOutputCsv,
@@ -350,6 +360,16 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options,
     }
 
     try bufferedWriter.flush();
+}
+
+fn listHeader(lineReader: anytype, csvLine: *CsvLine) !void {
+    const out = std.io.getStdOut();
+    if (try lineReader.readLine()) |line| {
+        for (try csvLine.parse(line)) |field| {
+            _ = try out.write(field);
+            _ = try out.write("\n");
+        }
+    }
 }
 
 fn writeOutputCsv(bufferedWriter: *const std.io.AnyWriter, fields: *const [][]const u8, options: *Options, isHeader: bool) !void {
