@@ -27,6 +27,13 @@ const OptionError = error{
     MoreThanOneEqualInFilter,
 };
 
+const OutputFormat = enum {
+    Csv,
+    LazyMarkdown,
+};
+
+const FormattedWriter = *const fn (*const std.io.AnyWriter, *const [][]const u8, *Options, bool) anyerror!void;
+
 const Options = struct {
     csvLine: ?CsvLine = null,
     allocator: std.mem.Allocator,
@@ -41,6 +48,7 @@ const Options = struct {
     selectionIndices: ?[]usize = null,
     trim: bool = false,
     filterFields: ?std.ArrayList(Filter) = null,
+    outputFormat: OutputFormat = .Csv,
 
     pub fn init(allocator: std.mem.Allocator) !Options {
         return .{
@@ -175,6 +183,7 @@ const Arguments = enum {
     @"--indices",
     @"--trim",
     @"--filter",
+    @"--format",
 };
 
 const hpa = std.heap.page_allocator;
@@ -219,6 +228,14 @@ pub fn main() !void {
                 .@"-Q", .@"--outputQuoute" => options.output_quoute = .{'\''},
                 .@"--outputNoQuote" => options.output_quoute = null,
                 .@"--trim" => options.trim = true,
+                .@"--format" => {
+                    if (std.meta.stringToEnum(OutputFormat, args[index + 1])) |outputFormat| {
+                        options.outputFormat = outputFormat;
+                    } else {
+                        try argumentValueError(arg, args[index + 1]);
+                    }
+                    skip_next = true;
+                },
                 .@"-h", .@"--header" => {
                     try options.setHeader(args[index + 1]); //todo: check if there are more arguments -> error if not
                     skip_next = true;
@@ -274,6 +291,12 @@ fn argumentError(arg: []u8) !noreturn {
     std.process.exit(2);
 }
 
+fn argumentValueError(arg: []u8, val: []u8) !noreturn {
+    try printUsage(std.io.getStdErr(), false);
+    std.log.err("value '{s}' for argument '{s}' is unknown\n", .{ val, arg });
+    std.process.exit(3);
+}
+
 fn processFileByName(fileName: []const u8, options: *Options, allocator: std.mem.Allocator) !void {
     const file = try std.fs.cwd().openFile(fileName, .{});
     defer file.close();
@@ -286,43 +309,51 @@ fn processFileByName(fileName: []const u8, options: *Options, allocator: std.mem
 
 fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options, allocator: std.mem.Allocator) !void {
     var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
+    const writer: std.io.AnyWriter = bufferedWriter.writer().any();
     var csvLine = try CsvLine.init(allocator, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null });
     defer csvLine.free();
+
+    const formattedWriter: FormattedWriter = switch (options.outputFormat) {
+        .Csv => &writeOutputCsv,
+        .LazyMarkdown => &writeOutputLazyMarkdown,
+    };
 
     if (options.fileHeader) {
         if (try lineReader.readLine()) |line| {
             try options.setHeader(line);
-            if (options.outputHeader) {
-                try options.setSelectionIndices();
-                const fields = try csvLine.parse(line);
-                try writeOutput(&bufferedWriter, &fields, options);
-            }
         }
-    } else if (options.header != null and options.outputHeader) {
+    }
+    if (options.header != null) {
         try options.setSelectionIndices();
-        try writeOutput(&bufferedWriter, &options.header.?, options);
-    } else {
-        try options.setSelectionIndices();
+    }
+
+    if (options.header != null and options.outputHeader) {
+        try formattedWriter(&writer, &options.header.?, options, true);
     }
 
     if (options.filterFields != null) {
         try options.setFilterIndices();
     }
 
-    while (try lineReader.readLine()) |line| {
-        const fields = try csvLine.parse(line);
-        if (options.filterFields != null) {
-            if (filterMatches(fields, options.filterFields.?.items)) {
-                try writeOutput(&bufferedWriter, &fields, options);
+    if (options.filterFields) |filterFields| {
+        while (try lineReader.readLine()) |line| {
+            const fields = try csvLine.parse(line);
+            if (filterMatches(fields, filterFields.items)) {
+                try formattedWriter(&writer, &fields, options, false);
             }
-        } else {
-            try writeOutput(&bufferedWriter, &fields, options);
+        }
+    } else {
+        while (try lineReader.readLine()) |line| {
+            const fields = try csvLine.parse(line);
+            try formattedWriter(&writer, &fields, options, false);
         }
     }
+
     try bufferedWriter.flush();
 }
 
-inline fn writeOutput(bufferedWriter: anytype, fields: *const [][]const u8, options: *Options) !void {
+fn writeOutputCsv(bufferedWriter: *const std.io.AnyWriter, fields: *const [][]const u8, options: *Options, isHeader: bool) !void {
+    _ = isHeader;
     if (options.selectionIndices) |indices| {
         for (indices, 0..) |field, index| {
             if (index > 0) {
@@ -351,6 +382,39 @@ inline fn writeOutput(bufferedWriter: anytype, fields: *const [][]const u8, opti
             }
         }
         _ = try bufferedWriter.write("\n");
+    }
+}
+
+fn writeOutputLazyMarkdown(bufferedWriter: *const std.io.AnyWriter, fields: *const [][]const u8, options: *Options, isHeader: bool) !void {
+    if (options.selectionIndices) |indices| {
+        for (indices) |field| {
+            _ = try bufferedWriter.write("| ");
+            _ = try bufferedWriter.write(fields.*[field]);
+            _ = try bufferedWriter.write(" ");
+        }
+        _ = try bufferedWriter.write("|\n");
+    } else {
+        for (fields.*) |field| {
+            _ = try bufferedWriter.write("| ");
+            _ = try bufferedWriter.write(field);
+            _ = try bufferedWriter.write(" ");
+        }
+        _ = try bufferedWriter.write("|\n");
+    }
+    if (isHeader) {
+        if (options.selectionIndices) |indices| {
+            for (indices) |field| {
+                _ = field;
+                _ = try bufferedWriter.write("| --- ");
+            }
+            _ = try bufferedWriter.write("|\n");
+        } else {
+            for (fields.*) |field| {
+                _ = field;
+                _ = try bufferedWriter.write("| --- ");
+            }
+            _ = try bufferedWriter.write("|\n");
+        }
     }
 }
 
