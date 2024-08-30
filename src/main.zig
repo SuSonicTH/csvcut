@@ -32,6 +32,8 @@ const OutputFormat = enum {
     LazyMarkdown,
 };
 
+const FormattedWriter = *const fn (*const std.io.AnyWriter, *const [][]const u8, *Options, bool) anyerror!void;
+
 const Options = struct {
     csvLine: ?CsvLine = null,
     allocator: std.mem.Allocator,
@@ -307,8 +309,14 @@ fn processFileByName(fileName: []const u8, options: *Options, allocator: std.mem
 
 fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options, allocator: std.mem.Allocator) !void {
     var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
+    const writer: std.io.AnyWriter = bufferedWriter.writer().any();
     var csvLine = try CsvLine.init(allocator, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null });
     defer csvLine.free();
+
+    const formattedWriter: FormattedWriter = switch (options.outputFormat) {
+        .Csv => &writeOutputCsv,
+        .LazyMarkdown => &writeOutputLazyMarkdown,
+    };
 
     if (options.fileHeader) {
         if (try lineReader.readLine()) |line| {
@@ -320,10 +328,7 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options,
     }
 
     if (options.header != null and options.outputHeader) {
-        switch (options.outputFormat) {
-            .Csv => try writeOutputCsv(&bufferedWriter, &options.header.?, options, true),
-            .LazyMarkdown => try writeOutputLazyMarkdown(&bufferedWriter, &options.header.?, options, true),
-        }
+        try formattedWriter(&writer, &options.header.?, options, true);
     }
 
     if (options.filterFields != null) {
@@ -334,26 +339,20 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options,
         while (try lineReader.readLine()) |line| {
             const fields = try csvLine.parse(line);
             if (filterMatches(fields, filterFields.items)) {
-                switch (options.outputFormat) {
-                    .Csv => try writeOutputCsv(&bufferedWriter, &fields, options, false),
-                    .LazyMarkdown => try writeOutputLazyMarkdown(&bufferedWriter, &fields, options, false),
-                }
+                try formattedWriter(&writer, &fields, options, false);
             }
         }
     } else {
         while (try lineReader.readLine()) |line| {
             const fields = try csvLine.parse(line);
-            switch (options.outputFormat) {
-                .Csv => try writeOutputCsv(&bufferedWriter, &fields, options, false),
-                .LazyMarkdown => try writeOutputLazyMarkdown(&bufferedWriter, &fields, options, false),
-            }
+            try formattedWriter(&writer, &fields, options, false);
         }
     }
 
     try bufferedWriter.flush();
 }
 
-fn writeOutputCsv(bufferedWriter: anytype, fields: *const [][]const u8, options: *Options, isHeader: bool) !void {
+fn writeOutputCsv(bufferedWriter: *const std.io.AnyWriter, fields: *const [][]const u8, options: *Options, isHeader: bool) !void {
     _ = isHeader;
     if (options.selectionIndices) |indices| {
         for (indices, 0..) |field, index| {
@@ -386,7 +385,7 @@ fn writeOutputCsv(bufferedWriter: anytype, fields: *const [][]const u8, options:
     }
 }
 
-fn writeOutputLazyMarkdown(bufferedWriter: anytype, fields: *const [][]const u8, options: *Options, isHeader: bool) !void {
+fn writeOutputLazyMarkdown(bufferedWriter: *const std.io.AnyWriter, fields: *const [][]const u8, options: *Options, isHeader: bool) !void {
     if (options.selectionIndices) |indices| {
         for (indices) |field| {
             _ = try bufferedWriter.write("| ");
