@@ -18,6 +18,10 @@ Options:
         -h, --header             use given heder (field1,field2,...)
         -n, --noHeader           file has no header
 
+    output formats:
+        --format Csv             csv file for format options see output section
+        --format LazyMarkdown    compact markdown table format NOT formatted
+
     output:
         -T, --outputTab          use tab (\t) as field separator
         -C, --outputComma        use comma (,) as field separator (default)
