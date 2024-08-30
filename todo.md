@@ -20,5 +20,4 @@
 ### speed
 
 ### cleanup
-* move options to separate file
-* move file processing to separate file?
+* move outputWriter to separate file?
