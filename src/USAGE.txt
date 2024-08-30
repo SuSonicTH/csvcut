@@ -22,6 +22,7 @@ Options:
     output formats:
         --format Csv             csv file for format options see output section
         --format LazyMarkdown    compact markdown table format NOT formatted
+        --format LazyJira        compact jira markup table format NOT formatted
 
     output:
         -T, --outputTab          use tab (\t) as field separator

@@ -30,6 +30,7 @@ const OptionError = error{
 const OutputFormat = enum {
     Csv,
     LazyMarkdown,
+    LazyJira,
 };
 
 const FormattedWriter = *const fn (*const std.io.AnyWriter, *const [][]const u8, *Options, bool) anyerror!void;
@@ -326,6 +327,7 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options,
     const formattedWriter: FormattedWriter = switch (options.outputFormat) {
         .Csv => &writeOutputCsv,
         .LazyMarkdown => &writeOutputLazyMarkdown,
+        .LazyJira => &writeOutputLazyJira,
     };
 
     if (options.fileHeader) {
@@ -409,14 +411,14 @@ fn writeOutputLazyMarkdown(bufferedWriter: *const std.io.AnyWriter, fields: *con
     if (options.selectionIndices) |indices| {
         for (indices) |field| {
             _ = try bufferedWriter.write("| ");
-            _ = try bufferedWriter.write(fields.*[field]);
+            _ = try bufferedWriter.write(try escapeMarkup(fields.*[field], markdownSpecial));
             _ = try bufferedWriter.write(" ");
         }
         _ = try bufferedWriter.write("|\n");
     } else {
         for (fields.*) |field| {
             _ = try bufferedWriter.write("| ");
-            _ = try bufferedWriter.write(field);
+            _ = try bufferedWriter.write(try escapeMarkup(field, markdownSpecial));
             _ = try bufferedWriter.write(" ");
         }
         _ = try bufferedWriter.write("|\n");
@@ -438,6 +440,67 @@ fn writeOutputLazyMarkdown(bufferedWriter: *const std.io.AnyWriter, fields: *con
     }
 }
 
+var escapeBuffer: [1024]u8 = undefined;
+const markdownSpecial: []const u8 = "\\`*_{}[]<>()#+-.!|";
+const jiraSpecial: []const u8 = "*_-{|^+?#";
+
+inline fn escapeMarkup(field: []const u8, comptime specialCharacters: []const u8) ![]const u8 {
+    var offset: u16 = 0;
+    for (field, 0..) |c, i| {
+        if (std.mem.indexOfScalar(u8, specialCharacters, c)) |pos| {
+            _ = pos;
+            if (offset == 0) {
+                std.mem.copyForwards(u8, &escapeBuffer, field[0..i]);
+            }
+            escapeBuffer[i + offset] = '\\';
+            offset += 1;
+            escapeBuffer[i + offset] = c;
+        } else if (offset > 0) {
+            escapeBuffer[i + offset] = c;
+        }
+    }
+    if (offset > 0) {
+        return escapeBuffer[0 .. field.len + offset];
+    }
+    return field;
+}
+
+fn writeOutputLazyJira(bufferedWriter: *const std.io.AnyWriter, fields: *const [][]const u8, options: *Options, isHeader: bool) !void {
+    if (!isHeader) {
+        if (options.selectionIndices) |indices| {
+            for (indices) |field| {
+                _ = try bufferedWriter.write("| ");
+                _ = try bufferedWriter.write(try escapeMarkup(fields.*[field], jiraSpecial));
+                _ = try bufferedWriter.write(" ");
+            }
+            _ = try bufferedWriter.write("|\n");
+        } else {
+            for (fields.*) |field| {
+                _ = try bufferedWriter.write("| ");
+                _ = try bufferedWriter.write(try escapeMarkup(field, jiraSpecial));
+                _ = try bufferedWriter.write(" ");
+            }
+            _ = try bufferedWriter.write("|\n");
+        }
+    } else {
+        if (options.selectionIndices) |indices| {
+            for (indices) |field| {
+                _ = try bufferedWriter.write("|| ");
+                _ = try bufferedWriter.write(try escapeMarkup(fields.*[field], jiraSpecial));
+                _ = try bufferedWriter.write(" ");
+            }
+            _ = try bufferedWriter.write("||\n");
+        } else {
+            for (fields.*) |field| {
+                _ = try bufferedWriter.write("|| ");
+                _ = try bufferedWriter.write(try escapeMarkup(field, jiraSpecial));
+                _ = try bufferedWriter.write(" ");
+            }
+            _ = try bufferedWriter.write("||\n");
+        }
+    }
+}
+
 inline fn filterMatches(fields: [][]const u8, filterList: []Filter) bool {
     for (filterList) |filter| {
         if (!std.mem.eql(u8, fields[filter.index], filter.value)) {
@@ -447,6 +510,16 @@ inline fn filterMatches(fields: [][]const u8, filterList: []Filter) bool {
     return true;
 }
 
-test {
-    std.testing.refAllDecls(@This());
+test "escapeMarkdown returns filed if no escape is needed" {
+    const unescaped: []const u8 = "unescaped";
+    const res = try escapeMarkup(unescaped);
+    try std.testing.expectEqualStrings(unescaped, res);
+    try std.testing.expectEqual(unescaped.ptr, res.ptr);
+}
+
+test "escapeMarkdown escapes special characters with backslash" {
+    const unescaped: []const u8 = "unescaped* -test [1-3] #Test end";
+    const res = try escapeMarkup(unescaped);
+    try std.testing.expectEqualStrings("unescaped\\* \\-test \\[1\\-3\\] \\#Test end", res);
+    try std.testing.expectEqual(&escapeBuffer, res.ptr);
 }
