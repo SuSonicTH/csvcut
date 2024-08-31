@@ -51,6 +51,7 @@ const Argument = enum {
     @"--listHeader",
     @"--stdin",
     @"--skipLines",
+    @"--exitCodes",
 };
 
 const ExitCode = enum(u8) {
@@ -58,9 +59,50 @@ const ExitCode = enum(u8) {
     noArgumentError,
     noInputError,
     stdinOrFileError,
-    argumentError,
-    argumentValueError,
+    unknownArgumentError,
+    argumentWithUnknownValueError,
     argumentValueMissingError,
+
+    const useStdinMessage = "\nuse --stdin if you want to process standard input";
+
+    pub fn code(self: ExitCode) u8 {
+        return @intFromEnum(self);
+    }
+
+    pub fn message(self: ExitCode) []const u8 {
+        switch (self) {
+            .OK => return "",
+            .noArgumentError => return "no argument given, expecting at least one argument" ++ useStdinMessage,
+            .noInputError => return "no input file given" ++ useStdinMessage,
+            .stdinOrFileError => return "use either --stdin or input file(s) not both" ++ useStdinMessage,
+            .unknownArgumentError => return "argument '{s}' is unknown",
+            .argumentWithUnknownValueError => return "argument '{s}' got unknown value '{s}'",
+            .argumentValueMissingError => return "value for argument '{s}' is missing",
+        }
+    }
+
+    pub fn exit(self: ExitCode) !noreturn {
+        std.process.exit(self.code());
+    }
+
+    fn printExitCodes() !void {
+        const writer = std.io.getStdOut().writer();
+        _ = try writer.write(version);
+        _ = try writer.write("Exit Codes:\n");
+
+        inline for (std.meta.fields(ExitCode)) |exitCode| {
+            try std.fmt.format(writer, "{d}: {s}\n", .{ exitCode.value, exitCode.name });
+        }
+        try ExitCode.OK.exit();
+    }
+
+    fn printErrorAndExit(comptime self: ExitCode, values: anytype) !noreturn {
+        const stdErr = std.io.getStdErr();
+        try stdErr.writeAll(version);
+        std.log.err(self.message(), values);
+        try stdErr.writeAll("\nuse csvcut --help for argument documentation\n");
+        try self.exit();
+    }
 };
 
 pub const Parser = struct {
@@ -68,7 +110,7 @@ pub const Parser = struct {
 
     pub fn parse(options: *Options, args: [][]u8) !void {
         if (args.len == 1) {
-            try noArgumentError();
+            try ExitCode.noArgumentError.printErrorAndExit(.{});
         }
 
         for (args[1..], 1..) |arg, index| {
@@ -78,9 +120,9 @@ pub const Parser = struct {
             }
             if (arg[0] == '-') {
                 switch (std.meta.stringToEnum(Argument, arg) orelse {
-                    try argumentError(arg);
+                    try ExitCode.unknownArgumentError.printErrorAndExit(.{arg});
                 }) {
-                    .@"--help" => try printUsage(std.io.getStdOut(), true),
+                    .@"--help" => try printUsage(),
                     .@"-v", .@"--version" => try printVersion(),
                     .@"-t", .@"--tab" => options.input_separator = .{'\t'},
                     .@"-c", .@"--comma" => options.input_separator = .{','},
@@ -102,7 +144,7 @@ pub const Parser = struct {
                         if (std.meta.stringToEnum(OutputFormat, try argumentValue(args, index, arg))) |outputFormat| {
                             options.outputFormat = outputFormat;
                         } else {
-                            try argumentValueError(arg, try argumentValue(args, index, arg));
+                            try ExitCode.argumentWithUnknownValueError.printErrorAndExit(.{ arg, try argumentValue(args, index, arg) });
                         }
                         skipNext();
                     },
@@ -129,6 +171,7 @@ pub const Parser = struct {
                         try options.addSkipLines(try argumentValue(args, index, arg));
                         skipNext();
                     },
+                    .@"--exitCodes" => try ExitCode.printExitCodes(),
                 }
             } else {
                 try options.inputFiles.append(arg);
@@ -136,9 +179,9 @@ pub const Parser = struct {
         }
 
         if (!options.useStdin and options.inputFiles.items.len == 0) {
-            try noInputError();
+            try ExitCode.noInputError.printErrorAndExit(.{});
         } else if (options.useStdin and options.inputFiles.items.len > 0) {
-            try stdinOrFileError();
+            try ExitCode.stdinOrFileError.printErrorAndExit(.{});
         }
     }
 
@@ -149,53 +192,19 @@ pub const Parser = struct {
     fn argumentValue(args: [][]u8, index: usize, argument: []const u8) ![]u8 {
         const pos = index + 1;
         if (pos >= args.len) {
-            try argumentValueMissingError(argument);
+            try ExitCode.argumentValueMissingError.printErrorAndExit(.{argument});
         }
         return args[pos];
     }
 
-    fn printUsage(file: std.fs.File, shouldExit: bool) !void {
+    fn printUsage() !void {
         const help = @embedFile("USAGE.txt");
-        try file.writeAll(version ++ help);
-        if (shouldExit) {}
+        try std.io.getStdOut().writeAll(version ++ help);
+        try ExitCode.OK.exit();
     }
 
     fn printVersion() !void {
         const license = @embedFile("LICENSE.txt");
         try std.io.getStdOut().writeAll(version ++ license);
-    }
-
-    const useStdinMessage = "\nuse --stdin if you want to process standard input";
-
-    fn noArgumentError() !noreturn {
-        try printErrorAndExit("no argument given, expecting at least one argument" ++ useStdinMessage, .{}, ExitCode.noArgumentError);
-    }
-
-    fn noInputError() !noreturn {
-        try printErrorAndExit("no input file given" ++ useStdinMessage, .{}, ExitCode.noInputError);
-    }
-
-    fn stdinOrFileError() !noreturn {
-        try printErrorAndExit("use either --stdin or input file(s) not both" ++ useStdinMessage, .{}, ExitCode.stdinOrFileError);
-    }
-
-    fn argumentError(arg: []const u8) !noreturn {
-        try printErrorAndExit("argument '{s}' is unknown\n", .{arg}, ExitCode.argumentError);
-    }
-
-    fn argumentValueError(arg: []const u8, val: []u8) !noreturn {
-        try printErrorAndExit("value '{s}' for argument '{s}' is unknown\n", .{ val, arg }, ExitCode.argumentValueError);
-    }
-
-    fn argumentValueMissingError(arg: []const u8) !noreturn {
-        try printErrorAndExit("value for argument '{s}' is missing\n", .{arg}, ExitCode.argumentValueMissingError);
-    }
-
-    inline fn printErrorAndExit(message: []const u8, values: anytype, exitCode: ExitCode) !noreturn {
-        const stdErr = std.io.getStdErr();
-        try stdErr.writeAll(version);
-        std.log.err(message, values);
-        try stdErr.writeAll("\nuse csvcut --help for argument documentation\n");
-        std.process.exit(@intFromEnum(exitCode));
     }
 };

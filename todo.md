@@ -15,7 +15,7 @@
 ## improvements
 
 ### change argument logic
-* maybe instead of 2 options to select columns (--fields and --indices) just have --fields and prefix indices with a special character  (e.g. --fields ID,NAME,%5) could com handy for the planned additional --sum feature (else it also needs 2 options)
+* maybe instead of 2 options to select columns (--fields and --indices) just have --fields and prefix indices with a special character  (e.g. --fields ID,NAME,%5) could come handy for the planned additional --sum feature (else it also needs 2 options)
 * single option for input/output formats with argument (i.e. --inputSeparator comma instead of --comma could also accept single characters --inputSeparator ";" )
 
 ### speed
