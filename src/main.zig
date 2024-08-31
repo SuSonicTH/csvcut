@@ -4,7 +4,7 @@ const MemMappedLineReader = @import("LineReader").MemMappedLineReader;
 const CsvLine = @import("CsvLine").CsvLine;
 const Options = @import("options.zig").Options;
 const Filter = @import("options.zig").Filter;
-const parseArguments = @import("arguments.zig").parse;
+const ArgumentParser = @import("arguments.zig").Parser;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -15,7 +15,7 @@ pub fn main() !void {
     var options = try Options.init(allocator);
     defer options.deinit();
 
-    try parseArguments(&options, args);
+    try ArgumentParser.parse(&options, args);
 
     if (options.useStdin) {
         var lineReader = try LineReader.init(std.io.getStdIn().reader(), allocator, .{});

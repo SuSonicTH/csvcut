@@ -4,6 +4,7 @@
 * more output formats
   * markdown (all columns are space padded to maximum needed size)
   * jira (space padded jira/confluence markdown output)
+* paged output
 * paged output which formats output in a nice ascii table format for browsing
 * option to filter indexed lines at the beginning of the file (i.e. --filterLine 1,3,4 to filter lines 1,3 and 4)
 * option to filter the last x lines (trailer), maybe as part of index filter with negative sign (i.e. --filterLine -1,-2 filters last 2 lines)

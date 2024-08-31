@@ -139,4 +139,10 @@ pub const Options = struct {
             try self.filterFields.?.append(filter);
         }
     }
+
+    pub fn addSkipLines(self: *Options, list: []const u8) !void {
+        for ((try (try self.getCsvLine()).parse(list))) |item| {
+            _ = item;
+        }
+    }
 };
