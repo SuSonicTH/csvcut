@@ -47,6 +47,7 @@ pub const Options = struct {
     listHeader: bool = false,
     useStdin: bool = false,
     inputFiles: std.ArrayList([]const u8),
+    skipLine: ?std.AutoHashMap(usize, bool) = null,
 
     pub fn init(allocator: std.mem.Allocator) !Options {
         return .{
@@ -65,6 +66,9 @@ pub const Options = struct {
         }
         if (self.csvLine != null) {
             self.csvLine.?.free();
+        }
+        if (self.skipLine != null) {
+            self.skipLine.?.deinit();
         }
     }
 
@@ -141,8 +145,12 @@ pub const Options = struct {
     }
 
     pub fn addSkipLines(self: *Options, list: []const u8) !void {
+        if (self.skipLine == null) {
+            self.skipLine = std.AutoHashMap(usize, bool).init(self.allocator);
+        }
         for ((try (try self.getCsvLine()).parse(list))) |item| {
-            _ = item;
+            const lineNumber = try std.fmt.parseInt(usize, item, 10);
+            try self.skipLine.?.put(lineNumber, true);
         }
     }
 };

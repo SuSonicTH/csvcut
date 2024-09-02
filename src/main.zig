@@ -58,14 +58,21 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options,
         .LazyJira => &writeOutputLazyJira,
     };
 
+    var lineNumber: usize = 0;
+
     if (options.fileHeader) {
+        while (options.skipLine != null and options.skipLine.?.get(lineNumber) != null) {
+            lineNumber += 1;
+            if ((try lineReader.readLine()) == null) {
+                return;
+            }
+        }
         if (try lineReader.readLine()) |line| {
             try options.setHeader(line);
         }
     }
-    if (options.header != null) {
-        try options.setSelectionIndices();
-    }
+
+    try options.setSelectionIndices();
 
     if (options.header != null and options.outputHeader) {
         try formattedWriter(&writer, &options.header.?, options, true);
@@ -77,15 +84,21 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options,
 
     if (options.filterFields) |filterFields| {
         while (try lineReader.readLine()) |line| {
-            const fields = try csvLine.parse(line);
-            if (filterMatches(fields, filterFields.items)) {
-                try formattedWriter(&writer, &fields, options, false);
+            lineNumber += 1;
+            if (options.skipLine == null or options.skipLine.?.get(lineNumber) == null) {
+                const fields = try csvLine.parse(line);
+                if (filterMatches(fields, filterFields.items)) {
+                    try formattedWriter(&writer, &fields, options, false);
+                }
             }
         }
     } else {
         while (try lineReader.readLine()) |line| {
-            const fields = try csvLine.parse(line);
-            try formattedWriter(&writer, &fields, options, false);
+            lineNumber += 1;
+            if (options.skipLine == null or options.skipLine.?.get(lineNumber) == null) {
+                const fields = try csvLine.parse(line);
+                try formattedWriter(&writer, &fields, options, false);
+            }
         }
     }
 
