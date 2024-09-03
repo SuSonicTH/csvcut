@@ -26,6 +26,7 @@ pub fn build(b: *std.Build) void {
 
     if (optimize != .Debug) {
         exe.root_module.strip = true;
+        exe.root_module.single_threaded = true;
     }
 
     b.installArtifact(exe);
