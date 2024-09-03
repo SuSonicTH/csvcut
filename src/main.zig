@@ -40,6 +40,36 @@ fn processFileByName(fileName: []const u8, options: *Options, allocator: std.mem
 
 const FormattedWriter = *const fn (*const std.io.AnyWriter, *const [][]const u8, *Options, bool) anyerror!void;
 
+const Fields = struct {
+    allocator: std.mem.Allocator,
+    fields: [][]const u8,
+    count: usize,
+
+    pub fn init(fields: *const [][]const u8, options: *Options, allocator: std.mem.Allocator) !Fields {
+        var self: Fields = (try allocator.alloc(Fields, 1))[0];
+        self.allocator = allocator;
+        self.count = 1;
+
+        if (options.selectionIndices) |indices| {
+            self.fields = try allocator.alloc([]u8, indices.len + 1);
+            for (indices, 0..) |field, i| {
+                self.fields[i] = try allocator.dupe(u8, fields.*[field]);
+            }
+        } else {
+            self.fields = try allocator.alloc([]u8, fields.len + 1);
+            for (fields.*, 0..) |field, i| {
+                self.fields[i] = try allocator.dupe(u8, field);
+            }
+        }
+        return self;
+    }
+
+    pub fn get(self: *const Fields) !*const [][]const u8 {
+        self.fields[self.fields.len - 1] = try std.fmt.allocPrint(self.allocator, "{d}", .{self.count});
+        return &self.fields;
+    }
+};
+
 fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options, allocator: std.mem.Allocator) !void {
     var csvLine = try CsvLine.init(allocator, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null });
     defer csvLine.free();
@@ -75,9 +105,15 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options,
     try options.setSelectionIndices();
 
     if (options.header != null and options.outputHeader) {
-        try formattedWriter(&lineWriter, &options.header.?, options, false);
         if (options.count) {
-            _ = try bufferedWriter.write("         ");
+            const header = try (try Fields.init(&options.header.?, options, allocator)).get();
+            header.*[header.*.len - 1] = "Count";
+            const selectionIndices = options.selectionIndices;
+            options.selectionIndices = null;
+            try formattedWriter(&lineWriter, header, options, false);
+            options.selectionIndices = selectionIndices;
+        } else {
+            try formattedWriter(&lineWriter, &options.header.?, options, false);
         }
         _ = try bufferedWriter.write(lineBuffer.items);
     }
@@ -91,9 +127,11 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options,
         uniqueSet = std.StringHashMap(u1).init(allocator);
     }
 
-    var countMap: ?std.StringHashMap(usize) = null;
+    var countMap: std.StringHashMap(Fields) = undefined;
+    var keyBuffer: std.ArrayList(u8) = undefined;
     if (options.count) {
-        countMap = std.StringHashMap(usize).init(allocator);
+        countMap = std.StringHashMap(Fields).init(allocator);
+        keyBuffer = try std.ArrayList(u8).initCapacity(allocator, 1024);
     }
 
     while (try lineReader.readLine()) |line| {
@@ -102,21 +140,23 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options,
             const fields = try csvLine.parse(line);
 
             if (options.filterFields == null or filterMatches(fields, options.filterFields.?.items)) {
-                lineBuffer.clearRetainingCapacity();
-                try formattedWriter(&lineWriter, &fields, options, false);
-
                 if (options.unique) {
+                    lineBuffer.clearRetainingCapacity();
+                    try formattedWriter(&lineWriter, &fields, options, false);
+
                     if (!uniqueSet.?.contains(lineBuffer.items)) {
                         try uniqueSet.?.put(try allocator.dupe(u8, lineBuffer.items), 1);
                         _ = try bufferedWriter.write(lineBuffer.items);
                     }
                 } else if (options.count) {
-                    if (countMap.?.getEntry(lineBuffer.items)) |entry| {
-                        entry.value_ptr.* += 1;
+                    if (countMap.getEntry(try getKey(&keyBuffer, &fields, options))) |entry| {
+                        entry.value_ptr.*.count += 1;
                     } else {
-                        try countMap.?.put(try allocator.dupe(u8, lineBuffer.items), 1);
+                        try countMap.put(try allocator.dupe(u8, keyBuffer.items), try Fields.init(&fields, options, allocator));
                     }
                 } else {
+                    lineBuffer.clearRetainingCapacity();
+                    try formattedWriter(&lineWriter, &fields, options, false);
                     _ = try bufferedWriter.write(lineBuffer.items);
                 }
             }
@@ -124,9 +164,12 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options,
     }
 
     if (options.count) {
-        var iterator = countMap.?.iterator();
+        options.selectionIndices = null;
+        var iterator = countMap.iterator();
         while (iterator.next()) |entry| {
-            try bufferedWriter.writer().print("{d: >8} {s}", .{ entry.value_ptr.*, entry.key_ptr.* });
+            lineBuffer.clearRetainingCapacity();
+            try formattedWriter(&lineWriter, try entry.value_ptr.get(), options, false);
+            _ = try bufferedWriter.write(lineBuffer.items);
         }
     }
 
@@ -141,6 +184,22 @@ fn listHeader(lineReader: anytype, csvLine: *CsvLine) !void {
             _ = try out.write("\n");
         }
     }
+}
+
+fn getKey(keyBuffer: *std.ArrayList(u8), fields: *const [][]const u8, options: *Options) ![]u8 {
+    keyBuffer.clearRetainingCapacity();
+    if (options.selectionIndices) |indices| {
+        for (indices) |field| {
+            try keyBuffer.appendSlice(fields.*[field]);
+            try keyBuffer.append('|');
+        }
+    } else {
+        for (fields.*) |field| {
+            try keyBuffer.appendSlice(field);
+            try keyBuffer.append('|');
+        }
+    }
+    return keyBuffer.items;
 }
 
 fn writeOutputCsv(bufferedWriter: *const std.io.AnyWriter, fields: *const [][]const u8, options: *Options, isHeader: bool) !void {
