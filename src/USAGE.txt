@@ -52,3 +52,4 @@ Options:
             --unique            only output unique lines
                                 check is applied after other processings
 
+            --count             like --unique but adds a count column
