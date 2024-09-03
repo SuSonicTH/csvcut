@@ -6,13 +6,16 @@ const Options = @import("options.zig").Options;
 const Filter = @import("options.zig").Filter;
 const ArgumentParser = @import("arguments.zig").Parser;
 
+var allocator: std.mem.Allocator = undefined;
+var options: Options = undefined;
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
+    allocator = gpa.allocator();
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    var options = try Options.init(allocator);
+    options = try Options.init(allocator);
     defer options.deinit();
 
     try ArgumentParser.parse(&options, args);
@@ -20,34 +23,30 @@ pub fn main() !void {
     if (options.useStdin) {
         var lineReader = try LineReader.init(std.io.getStdIn().reader(), allocator, .{});
         defer lineReader.deinit();
-        try proccessFile(&lineReader, std.io.getStdOut(), &options, allocator);
+        try proccessFile(&lineReader, std.io.getStdOut());
     } else {
         for (options.inputFiles.items) |file| {
-            try processFileByName(file, &options, allocator);
+            try processFileByName(file);
         }
     }
 }
 
-fn processFileByName(fileName: []const u8, options: *Options, allocator: std.mem.Allocator) !void {
+fn processFileByName(fileName: []const u8) !void {
     const file = try std.fs.cwd().openFile(fileName, .{});
     defer file.close();
     var lineReader = try MemMappedLineReader.init(file, .{});
     //var lineReader = try LineReader.init(file.reader(), allocator, .{});
     defer lineReader.deinit();
 
-    try proccessFile(&lineReader, std.io.getStdOut(), options, allocator);
+    try proccessFile(&lineReader, std.io.getStdOut());
 }
 
-const FormattedWriter = *const fn (*const std.io.AnyWriter, *const [][]const u8, *Options, bool) anyerror!void;
-
 const Fields = struct {
-    allocator: std.mem.Allocator,
     fields: [][]const u8,
     count: usize,
 
-    pub fn init(fields: *const [][]const u8, options: *Options, allocator: std.mem.Allocator) !Fields {
+    pub fn init(fields: *const [][]const u8) !Fields {
         var self: Fields = (try allocator.alloc(Fields, 1))[0];
-        self.allocator = allocator;
         self.count = 1;
 
         if (options.selectionIndices) |indices| {
@@ -65,12 +64,41 @@ const Fields = struct {
     }
 
     pub fn get(self: *const Fields) !*const [][]const u8 {
-        self.fields[self.fields.len - 1] = try std.fmt.allocPrint(self.allocator, "{d}", .{self.count});
+        self.fields[self.fields.len - 1] = try std.fmt.allocPrint(allocator, "{d}", .{self.count});
         return &self.fields;
     }
 };
 
-fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options, allocator: std.mem.Allocator) !void {
+const SelectedFields = struct {
+    var selected: [][]const u8 = undefined;
+
+    fn init() !void {
+        if (options.selectionIndices) |selectionIndices| {
+            selected = try allocator.alloc([]u8, selectionIndices.len);
+        }
+    }
+
+    fn deinit() void {
+        if (options.selectionIndices) {
+            allocator.free(selected);
+        }
+    }
+
+    fn get(fields: *const [][]const u8) *const [][]const u8 {
+        if (options.selectionIndices) |indices| {
+            for (indices, 0..) |field, index| {
+                selected[index] = fields.*[field];
+            }
+            return &selected;
+        } else {
+            return fields;
+        }
+    }
+};
+
+const FormattedWriter = *const fn (*const std.io.AnyWriter, *const [][]const u8, bool) anyerror!void;
+
+fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
     var csvLine = try CsvLine.init(allocator, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null });
     defer csvLine.free();
 
@@ -103,17 +131,15 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options,
     }
 
     try options.setSelectionIndices();
+    try SelectedFields.init();
 
     if (options.header != null and options.outputHeader) {
         if (options.count) {
-            const header = try (try Fields.init(&options.header.?, options, allocator)).get();
+            const header = try (try Fields.init(&options.header.?)).get();
             header.*[header.*.len - 1] = "Count";
-            const selectionIndices = options.selectionIndices;
-            options.selectionIndices = null;
-            try formattedWriter(&lineWriter, header, options, false);
-            options.selectionIndices = selectionIndices;
+            try formattedWriter(&lineWriter, header, false);
         } else {
-            try formattedWriter(&lineWriter, &options.header.?, options, false);
+            try formattedWriter(&lineWriter, SelectedFields.get(&options.header.?), false);
         }
         _ = try bufferedWriter.write(lineBuffer.items);
     }
@@ -142,21 +168,21 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options,
             if (options.filterFields == null or filterMatches(fields, options.filterFields.?.items)) {
                 if (options.unique) {
                     lineBuffer.clearRetainingCapacity();
-                    try formattedWriter(&lineWriter, &fields, options, false);
+                    try formattedWriter(&lineWriter, SelectedFields.get(&fields), false);
 
                     if (!uniqueSet.?.contains(lineBuffer.items)) {
                         try uniqueSet.?.put(try allocator.dupe(u8, lineBuffer.items), 1);
                         _ = try bufferedWriter.write(lineBuffer.items);
                     }
                 } else if (options.count) {
-                    if (countMap.getEntry(try getKey(&keyBuffer, &fields, options))) |entry| {
+                    if (countMap.getEntry(try getKey(&keyBuffer, &fields))) |entry| {
                         entry.value_ptr.*.count += 1;
                     } else {
-                        try countMap.put(try allocator.dupe(u8, keyBuffer.items), try Fields.init(&fields, options, allocator));
+                        try countMap.put(try allocator.dupe(u8, keyBuffer.items), try Fields.init(&fields));
                     }
                 } else {
                     lineBuffer.clearRetainingCapacity();
-                    try formattedWriter(&lineWriter, &fields, options, false);
+                    try formattedWriter(&lineWriter, SelectedFields.get(&fields), false);
                     _ = try bufferedWriter.write(lineBuffer.items);
                 }
             }
@@ -168,7 +194,7 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options,
         var iterator = countMap.iterator();
         while (iterator.next()) |entry| {
             lineBuffer.clearRetainingCapacity();
-            try formattedWriter(&lineWriter, try entry.value_ptr.get(), options, false);
+            try formattedWriter(&lineWriter, try entry.value_ptr.get(), false);
             _ = try bufferedWriter.write(lineBuffer.items);
         }
     }
@@ -186,7 +212,7 @@ fn listHeader(lineReader: anytype, csvLine: *CsvLine) !void {
     }
 }
 
-fn getKey(keyBuffer: *std.ArrayList(u8), fields: *const [][]const u8, options: *Options) ![]u8 {
+fn getKey(keyBuffer: *std.ArrayList(u8), fields: *const [][]const u8) ![]u8 {
     keyBuffer.clearRetainingCapacity();
     if (options.selectionIndices) |indices| {
         for (indices) |field| {
@@ -202,69 +228,36 @@ fn getKey(keyBuffer: *std.ArrayList(u8), fields: *const [][]const u8, options: *
     return keyBuffer.items;
 }
 
-fn writeOutputCsv(bufferedWriter: *const std.io.AnyWriter, fields: *const [][]const u8, options: *Options, isHeader: bool) !void {
+fn writeOutputCsv(bufferedWriter: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {
     _ = isHeader;
-    if (options.selectionIndices) |indices| {
-        for (indices, 0..) |field, index| {
-            if (index > 0) {
-                _ = try bufferedWriter.write(&options.output_separator);
-            }
-            if (options.output_quoute != null) {
-                _ = try bufferedWriter.write(&options.output_quoute.?);
-            }
-            _ = try bufferedWriter.write(fields.*[field]);
-            if (options.output_quoute != null) {
-                _ = try bufferedWriter.write(&options.output_quoute.?);
-            }
+    for (fields.*, 0..) |field, index| {
+        if (index > 0) {
+            _ = try bufferedWriter.write(&options.output_separator);
         }
-        _ = try bufferedWriter.write("\n");
-    } else {
-        for (fields.*, 0..) |field, index| {
-            if (index > 0) {
-                _ = try bufferedWriter.write(&options.output_separator);
-            }
-            if (options.output_quoute != null) {
-                _ = try bufferedWriter.write(&options.output_quoute.?);
-            }
-            _ = try bufferedWriter.write(field);
-            if (options.output_quoute != null) {
-                _ = try bufferedWriter.write(&options.output_quoute.?);
-            }
+        if (options.output_quoute != null) {
+            _ = try bufferedWriter.write(&options.output_quoute.?);
         }
-        _ = try bufferedWriter.write("\n");
+        _ = try bufferedWriter.write(field);
+        if (options.output_quoute != null) {
+            _ = try bufferedWriter.write(&options.output_quoute.?);
+        }
     }
+    _ = try bufferedWriter.write("\n");
 }
 
-fn writeOutputLazyMarkdown(bufferedWriter: *const std.io.AnyWriter, fields: *const [][]const u8, options: *Options, isHeader: bool) !void {
-    if (options.selectionIndices) |indices| {
-        for (indices) |field| {
-            _ = try bufferedWriter.write("| ");
-            _ = try bufferedWriter.write(try escapeMarkup(fields.*[field], markdownSpecial));
-            _ = try bufferedWriter.write(" ");
-        }
-        _ = try bufferedWriter.write("|\n");
-    } else {
-        for (fields.*) |field| {
-            _ = try bufferedWriter.write("| ");
-            _ = try bufferedWriter.write(try escapeMarkup(field, markdownSpecial));
-            _ = try bufferedWriter.write(" ");
-        }
-        _ = try bufferedWriter.write("|\n");
+fn writeOutputLazyMarkdown(bufferedWriter: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {
+    for (fields.*) |field| {
+        _ = try bufferedWriter.write("| ");
+        _ = try bufferedWriter.write(try escapeMarkup(field, markdownSpecial));
+        _ = try bufferedWriter.write(" ");
     }
+    _ = try bufferedWriter.write("|\n");
     if (isHeader) {
-        if (options.selectionIndices) |indices| {
-            for (indices) |field| {
-                _ = field;
-                _ = try bufferedWriter.write("| --- ");
-            }
-            _ = try bufferedWriter.write("|\n");
-        } else {
-            for (fields.*) |field| {
-                _ = field;
-                _ = try bufferedWriter.write("| --- ");
-            }
-            _ = try bufferedWriter.write("|\n");
+        for (fields.*) |field| {
+            _ = field;
+            _ = try bufferedWriter.write("| --- ");
         }
+        _ = try bufferedWriter.write("|\n");
     }
 }
 
@@ -293,39 +286,21 @@ inline fn escapeMarkup(field: []const u8, comptime specialCharacters: []const u8
     return field;
 }
 
-fn writeOutputLazyJira(bufferedWriter: *const std.io.AnyWriter, fields: *const [][]const u8, options: *Options, isHeader: bool) !void {
+fn writeOutputLazyJira(bufferedWriter: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {
     if (!isHeader) {
-        if (options.selectionIndices) |indices| {
-            for (indices) |field| {
-                _ = try bufferedWriter.write("| ");
-                _ = try bufferedWriter.write(try escapeMarkup(fields.*[field], jiraSpecial));
-                _ = try bufferedWriter.write(" ");
-            }
-            _ = try bufferedWriter.write("|\n");
-        } else {
-            for (fields.*) |field| {
-                _ = try bufferedWriter.write("| ");
-                _ = try bufferedWriter.write(try escapeMarkup(field, jiraSpecial));
-                _ = try bufferedWriter.write(" ");
-            }
-            _ = try bufferedWriter.write("|\n");
+        for (fields.*) |field| {
+            _ = try bufferedWriter.write("| ");
+            _ = try bufferedWriter.write(try escapeMarkup(field, jiraSpecial));
+            _ = try bufferedWriter.write(" ");
         }
+        _ = try bufferedWriter.write("|\n");
     } else {
-        if (options.selectionIndices) |indices| {
-            for (indices) |field| {
-                _ = try bufferedWriter.write("|| ");
-                _ = try bufferedWriter.write(try escapeMarkup(fields.*[field], jiraSpecial));
-                _ = try bufferedWriter.write(" ");
-            }
-            _ = try bufferedWriter.write("||\n");
-        } else {
-            for (fields.*) |field| {
-                _ = try bufferedWriter.write("|| ");
-                _ = try bufferedWriter.write(try escapeMarkup(field, jiraSpecial));
-                _ = try bufferedWriter.write(" ");
-            }
-            _ = try bufferedWriter.write("||\n");
+        for (fields.*) |field| {
+            _ = try bufferedWriter.write("|| ");
+            _ = try bufferedWriter.write(try escapeMarkup(field, jiraSpecial));
+            _ = try bufferedWriter.write(" ");
         }
+        _ = try bufferedWriter.write("||\n");
     }
 }
 
