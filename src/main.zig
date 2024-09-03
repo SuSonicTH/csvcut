@@ -50,16 +50,16 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options,
     }
 
     var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
-    const writer: std.io.AnyWriter = bufferedWriter.writer().any();
-
-    const formattedWriter: FormattedWriter = switch (options.outputFormat) {
+    const formattedWriter = switch (options.outputFormat) {
         .Csv => &writeOutputCsv,
         .LazyMarkdown => &writeOutputLazyMarkdown,
         .LazyJira => &writeOutputLazyJira,
     };
+    var lineBuffer = try std.ArrayList(u8).initCapacity(allocator, 1024);
+    defer lineBuffer.deinit();
+    const lineWriter = lineBuffer.writer().any();
 
     var lineNumber: usize = 0;
-
     if (options.fileHeader) {
         while (options.skipLine != null and options.skipLine.?.get(lineNumber) != null) {
             lineNumber += 1;
@@ -75,29 +75,35 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options,
     try options.setSelectionIndices();
 
     if (options.header != null and options.outputHeader) {
-        try formattedWriter(&writer, &options.header.?, options, true);
+        try formattedWriter(&lineWriter, &options.header.?, options, false);
+        _ = try bufferedWriter.write(lineBuffer.items);
     }
 
     if (options.filterFields != null) {
         try options.setFilterIndices();
     }
 
-    if (options.filterFields) |filterFields| {
-        while (try lineReader.readLine()) |line| {
-            lineNumber += 1;
-            if (options.skipLine == null or options.skipLine.?.get(lineNumber) == null) {
-                const fields = try csvLine.parse(line);
-                if (filterMatches(fields, filterFields.items)) {
-                    try formattedWriter(&writer, &fields, options, false);
+    var uniqueSet: ?std.StringHashMap(u1) = null;
+    if (options.unique) {
+        uniqueSet = std.StringHashMap(u1).init(allocator);
+    }
+
+    while (try lineReader.readLine()) |line| {
+        lineNumber += 1;
+        if (options.skipLine == null or options.skipLine.?.contains(lineNumber) == false) {
+            const fields = try csvLine.parse(line);
+
+            if (options.filterFields == null or filterMatches(fields, options.filterFields.?.items)) {
+                lineBuffer.clearRetainingCapacity();
+                try formattedWriter(&lineWriter, &fields, options, false);
+                if (options.unique) {
+                    if (!uniqueSet.?.contains(lineBuffer.items)) {
+                        try uniqueSet.?.put(try allocator.dupe(u8, lineBuffer.items), 1);
+                        _ = try bufferedWriter.write(lineBuffer.items);
+                    }
+                } else {
+                    _ = try bufferedWriter.write(lineBuffer.items);
                 }
-            }
-        }
-    } else {
-        while (try lineReader.readLine()) |line| {
-            lineNumber += 1;
-            if (options.skipLine == null or options.skipLine.?.get(lineNumber) == null) {
-                const fields = try csvLine.parse(line);
-                try formattedWriter(&writer, &fields, options, false);
             }
         }
     }

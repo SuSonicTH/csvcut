@@ -18,6 +18,7 @@ Options:
             --noQuote            don't use quoting (default)
         -h, --header             use given heder (field1,field2,...)
         -n, --noHeader           file has no header
+        
             --skipLines list     skip lines numbers in list
                                  indices as 0-based, header has zero index
 
@@ -42,7 +43,12 @@ Options:
                                 
         -I, --indices           comma separated indices of fields to output
                                 can be used multiple times
+            
             --filter            list of filters that are applied
                                 argument field1=value1,field2=value2,....
+            
             --trim              removes space & tab characters from start & end
+
+            --unique            only output unique lines
+                                check is applied after other processings
 
