@@ -76,6 +76,9 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options,
 
     if (options.header != null and options.outputHeader) {
         try formattedWriter(&lineWriter, &options.header.?, options, false);
+        if (options.count) {
+            _ = try bufferedWriter.write("         ");
+        }
         _ = try bufferedWriter.write(lineBuffer.items);
     }
 
@@ -88,6 +91,11 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options,
         uniqueSet = std.StringHashMap(u1).init(allocator);
     }
 
+    var countMap: ?std.StringHashMap(usize) = null;
+    if (options.count) {
+        countMap = std.StringHashMap(usize).init(allocator);
+    }
+
     while (try lineReader.readLine()) |line| {
         lineNumber += 1;
         if (options.skipLine == null or options.skipLine.?.contains(lineNumber) == false) {
@@ -96,15 +104,29 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File, options: *Options,
             if (options.filterFields == null or filterMatches(fields, options.filterFields.?.items)) {
                 lineBuffer.clearRetainingCapacity();
                 try formattedWriter(&lineWriter, &fields, options, false);
+
                 if (options.unique) {
                     if (!uniqueSet.?.contains(lineBuffer.items)) {
                         try uniqueSet.?.put(try allocator.dupe(u8, lineBuffer.items), 1);
                         _ = try bufferedWriter.write(lineBuffer.items);
                     }
+                } else if (options.count) {
+                    if (countMap.?.getEntry(lineBuffer.items)) |entry| {
+                        entry.value_ptr.* += 1;
+                    } else {
+                        try countMap.?.put(try allocator.dupe(u8, lineBuffer.items), 1);
+                    }
                 } else {
                     _ = try bufferedWriter.write(lineBuffer.items);
                 }
             }
+        }
+    }
+
+    if (options.count) {
+        var iterator = countMap.?.iterator();
+        while (iterator.next()) |entry| {
+            try bufferedWriter.writer().print("{d: >8} {s}", .{ entry.value_ptr.*, entry.key_ptr.* });
         }
     }
 

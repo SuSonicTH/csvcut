@@ -53,6 +53,7 @@ const Argument = enum {
     @"--skipLines",
     @"--exitCodes",
     @"--unique",
+    @"--count",
 };
 
 const ExitCode = enum(u8) {
@@ -142,6 +143,7 @@ pub const Parser = struct {
                     .@"--trim" => options.trim = true,
                     .@"-l", .@"--listHeader" => options.listHeader = true,
                     .@"--unique" => options.unique = true,
+                    .@"--count" => options.count = true,
                     .@"--format" => {
                         if (std.meta.stringToEnum(OutputFormat, try argumentValue(args, index, arg))) |outputFormat| {
                             options.outputFormat = outputFormat;

@@ -49,6 +49,7 @@ pub const Options = struct {
     inputFiles: std.ArrayList([]const u8),
     skipLine: ?std.AutoHashMap(usize, bool) = null,
     unique: bool = false,
+    count: bool = false,
 
     pub fn init(allocator: std.mem.Allocator) !Options {
         return .{
