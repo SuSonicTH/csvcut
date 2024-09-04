@@ -96,6 +96,25 @@ const SelectedFields = struct {
     }
 };
 
+const SkipableLineReader = struct {
+    var lineNumber: usize = 0;
+
+    fn reset() void {
+        lineNumber = 0;
+    }
+
+    inline fn readLine(lineReader: anytype) !?[]const u8 {
+        if (options.skipLine != null) {
+            while (options.skipLine.?.get(lineNumber) != null) {
+                _ = try lineReader.readLine();
+                lineNumber += 1;
+            }
+        }
+        lineNumber += 1;
+        return lineReader.readLine();
+    }
+};
+
 const FormattedWriter = *const fn (*const std.io.AnyWriter, *const [][]const u8, bool) anyerror!void;
 
 fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
@@ -117,15 +136,10 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
     defer lineBuffer.deinit();
     const lineWriter = lineBuffer.writer().any();
 
-    var lineNumber: usize = 0;
+    SkipableLineReader.reset();
+
     if (options.fileHeader) {
-        while (options.skipLine != null and options.skipLine.?.get(lineNumber) != null) {
-            lineNumber += 1;
-            if ((try lineReader.readLine()) == null) {
-                return;
-            }
-        }
-        if (try lineReader.readLine()) |line| {
+        if (try SkipableLineReader.readLine(lineReader)) |line| {
             try options.setHeader(line);
         }
     }
@@ -160,31 +174,28 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
         keyBuffer = try std.ArrayList(u8).initCapacity(allocator, 1024);
     }
 
-    while (try lineReader.readLine()) |line| {
-        lineNumber += 1;
-        if (options.skipLine == null or options.skipLine.?.contains(lineNumber) == false) {
-            const fields = try csvLine.parse(line);
+    while (try SkipableLineReader.readLine(lineReader)) |line| {
+        const fields = try csvLine.parse(line);
 
-            if (filterMatches(fields, options.filterFields)) {
-                if (options.unique) {
-                    lineBuffer.clearRetainingCapacity();
-                    try formattedWriter(&lineWriter, SelectedFields.get(&fields), false);
+        if (noFilterOrfilterMatches(fields, options.filterFields)) {
+            if (options.unique) {
+                lineBuffer.clearRetainingCapacity();
+                try formattedWriter(&lineWriter, SelectedFields.get(&fields), false);
 
-                    if (!uniqueSet.?.contains(lineBuffer.items)) {
-                        try uniqueSet.?.put(try allocator.dupe(u8, lineBuffer.items), 1);
-                        _ = try bufferedWriter.write(lineBuffer.items);
-                    }
-                } else if (options.count) {
-                    if (countMap.getEntry(try getKey(&keyBuffer, &fields))) |entry| {
-                        entry.value_ptr.*.count += 1;
-                    } else {
-                        try countMap.put(try allocator.dupe(u8, keyBuffer.items), try Fields.init(&fields));
-                    }
-                } else {
-                    lineBuffer.clearRetainingCapacity();
-                    try formattedWriter(&lineWriter, SelectedFields.get(&fields), false);
+                if (!uniqueSet.?.contains(lineBuffer.items)) {
+                    try uniqueSet.?.put(try allocator.dupe(u8, lineBuffer.items), 1);
                     _ = try bufferedWriter.write(lineBuffer.items);
                 }
+            } else if (options.count) {
+                if (countMap.getEntry(try getKey(&keyBuffer, &fields))) |entry| {
+                    entry.value_ptr.*.count += 1;
+                } else {
+                    try countMap.put(try allocator.dupe(u8, keyBuffer.items), try Fields.init(&fields));
+                }
+            } else {
+                lineBuffer.clearRetainingCapacity();
+                try formattedWriter(&lineWriter, SelectedFields.get(&fields), false);
+                _ = try bufferedWriter.write(lineBuffer.items);
             }
         }
     }
@@ -304,7 +315,7 @@ fn writeOutputLazyJira(bufferedWriter: *const std.io.AnyWriter, fields: *const [
     }
 }
 
-inline fn filterMatches(fields: [][]const u8, filterFields: ?std.ArrayList(Filter)) bool {
+inline fn noFilterOrfilterMatches(fields: [][]const u8, filterFields: ?std.ArrayList(Filter)) bool {
     if (filterFields == null) {
         return true;
     }
