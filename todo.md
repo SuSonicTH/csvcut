@@ -22,4 +22,3 @@
 * move outputWriter to separate file?
 * move lineNumber, skiplines decision to separate struct to just have readLine in proccessFile
 * move uniuqeSet and CountMap to separate structs to just call add on them in proccessFile
-* filterMatches could check if options.filterFields == null

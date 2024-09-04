@@ -84,7 +84,7 @@ const SelectedFields = struct {
         }
     }
 
-    fn get(fields: *const [][]const u8) *const [][]const u8 {
+    inline fn get(fields: *const [][]const u8) *const [][]const u8 {
         if (options.selectionIndices) |indices| {
             for (indices, 0..) |field, index| {
                 selected[index] = fields.*[field];
@@ -165,7 +165,7 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
         if (options.skipLine == null or options.skipLine.?.contains(lineNumber) == false) {
             const fields = try csvLine.parse(line);
 
-            if (options.filterFields == null or filterMatches(fields, options.filterFields.?.items)) {
+            if (filterMatches(fields, options.filterFields)) {
                 if (options.unique) {
                     lineBuffer.clearRetainingCapacity();
                     try formattedWriter(&lineWriter, SelectedFields.get(&fields), false);
@@ -304,8 +304,11 @@ fn writeOutputLazyJira(bufferedWriter: *const std.io.AnyWriter, fields: *const [
     }
 }
 
-inline fn filterMatches(fields: [][]const u8, filterList: []Filter) bool {
-    for (filterList) |filter| {
+inline fn filterMatches(fields: [][]const u8, filterFields: ?std.ArrayList(Filter)) bool {
+    if (filterFields == null) {
+        return true;
+    }
+    for (filterFields.?.items) |filter| {
         if (!std.mem.eql(u8, fields[filter.index], filter.value)) {
             return false;
         }
