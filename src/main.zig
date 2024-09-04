@@ -117,11 +117,13 @@ const SkipableLineReader = struct {
 
 const UniqueAgregator = struct {
     var uniqueSet: ?std.StringHashMap(u1) = null;
+    var initialized = false;
 
     fn init() void {
         if (options.unique) {
-            if (uniqueSet == null) {
+            if (!initialized) {
                 uniqueSet = std.StringHashMap(u1).init(allocator);
+                initialized = true;
             } else {
                 uniqueSet.?.clearRetainingCapacity();
             }
@@ -134,6 +136,49 @@ const UniqueAgregator = struct {
             return true;
         }
         return false;
+    }
+};
+
+const CountAggregator = struct {
+    var countMap: std.StringHashMap(Fields) = undefined;
+    var keyBuffer: std.ArrayList(u8) = undefined;
+    var initialized = false;
+
+    fn init() !void {
+        if (options.count) {
+            if (!initialized) {
+                countMap = std.StringHashMap(Fields).init(allocator);
+                keyBuffer = try std.ArrayList(u8).initCapacity(allocator, 1024);
+                initialized = true;
+            } else {
+                countMap.clearRetainingCapacity();
+                keyBuffer.clearRetainingCapacity();
+            }
+        }
+    }
+
+    fn add(fields: *const [][]const u8) !void {
+        if (countMap.getEntry(try getKey(fields))) |entry| {
+            entry.value_ptr.*.count += 1;
+        } else {
+            try countMap.put(try allocator.dupe(u8, keyBuffer.items), try Fields.init(fields));
+        }
+    }
+
+    fn getKey(fields: *const [][]const u8) ![]u8 {
+        keyBuffer.clearRetainingCapacity();
+        if (options.selectionIndices) |indices| {
+            for (indices) |field| {
+                try keyBuffer.appendSlice(fields.*[field]);
+                try keyBuffer.append('|');
+            }
+        } else {
+            for (fields.*) |field| {
+                try keyBuffer.appendSlice(field);
+                try keyBuffer.append('|');
+            }
+        }
+        return keyBuffer.items;
     }
 };
 
@@ -160,6 +205,7 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
 
     SkipableLineReader.init();
     UniqueAgregator.init();
+    try CountAggregator.init();
 
     if (options.fileHeader) {
         if (try SkipableLineReader.readLine(lineReader)) |line| {
@@ -185,13 +231,6 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
         try options.setFilterIndices();
     }
 
-    var countMap: std.StringHashMap(Fields) = undefined;
-    var keyBuffer: std.ArrayList(u8) = undefined;
-    if (options.count) {
-        countMap = std.StringHashMap(Fields).init(allocator);
-        keyBuffer = try std.ArrayList(u8).initCapacity(allocator, 1024);
-    }
-
     while (try SkipableLineReader.readLine(lineReader)) |line| {
         const fields = try csvLine.parse(line);
 
@@ -204,11 +243,7 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
                     _ = try bufferedWriter.write(lineBuffer.items);
                 }
             } else if (options.count) {
-                if (countMap.getEntry(try getKey(&keyBuffer, &fields))) |entry| {
-                    entry.value_ptr.*.count += 1;
-                } else {
-                    try countMap.put(try allocator.dupe(u8, keyBuffer.items), try Fields.init(&fields));
-                }
+                try CountAggregator.add(&fields);
             } else {
                 lineBuffer.clearRetainingCapacity();
                 try formattedWriter(&lineWriter, SelectedFields.get(&fields), false);
@@ -218,8 +253,7 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
     }
 
     if (options.count) {
-        options.selectionIndices = null;
-        var iterator = countMap.iterator();
+        var iterator = CountAggregator.countMap.iterator();
         while (iterator.next()) |entry| {
             lineBuffer.clearRetainingCapacity();
             try formattedWriter(&lineWriter, try entry.value_ptr.get(), false);
@@ -238,22 +272,6 @@ fn listHeader(lineReader: anytype, csvLine: *CsvLine) !void {
             _ = try out.write("\n");
         }
     }
-}
-
-fn getKey(keyBuffer: *std.ArrayList(u8), fields: *const [][]const u8) ![]u8 {
-    keyBuffer.clearRetainingCapacity();
-    if (options.selectionIndices) |indices| {
-        for (indices) |field| {
-            try keyBuffer.appendSlice(fields.*[field]);
-            try keyBuffer.append('|');
-        }
-    } else {
-        for (fields.*) |field| {
-            try keyBuffer.appendSlice(field);
-            try keyBuffer.append('|');
-        }
-    }
-    return keyBuffer.items;
 }
 
 fn writeOutputCsv(bufferedWriter: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {

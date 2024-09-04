@@ -20,4 +20,3 @@
 ### cleanup
 * move bufferedWriter, formattedWriter, lineBuffer and lineWriter so separate struct so proccessFile just inizializes and calls write/commit
 * move outputWriter to separate file?
-* move CountMap to separate structs to just call add/get in proccessFile
