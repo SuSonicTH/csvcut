@@ -99,7 +99,7 @@ const SelectedFields = struct {
 const SkipableLineReader = struct {
     var lineNumber: usize = 0;
 
-    fn reset() void {
+    fn init() void {
         lineNumber = 0;
     }
 
@@ -112,6 +112,28 @@ const SkipableLineReader = struct {
         }
         lineNumber += 1;
         return lineReader.readLine();
+    }
+};
+
+const UniqueAgregator = struct {
+    var uniqueSet: ?std.StringHashMap(u1) = null;
+
+    fn init() void {
+        if (options.unique) {
+            if (uniqueSet == null) {
+                uniqueSet = std.StringHashMap(u1).init(allocator);
+            } else {
+                uniqueSet.?.clearRetainingCapacity();
+            }
+        }
+    }
+
+    inline fn isNew(line: []u8) !bool {
+        if (!uniqueSet.?.contains(line)) {
+            try uniqueSet.?.put(try allocator.dupe(u8, line), 1);
+            return true;
+        }
+        return false;
     }
 };
 
@@ -136,7 +158,8 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
     defer lineBuffer.deinit();
     const lineWriter = lineBuffer.writer().any();
 
-    SkipableLineReader.reset();
+    SkipableLineReader.init();
+    UniqueAgregator.init();
 
     if (options.fileHeader) {
         if (try SkipableLineReader.readLine(lineReader)) |line| {
@@ -162,11 +185,6 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
         try options.setFilterIndices();
     }
 
-    var uniqueSet: ?std.StringHashMap(u1) = null;
-    if (options.unique) {
-        uniqueSet = std.StringHashMap(u1).init(allocator);
-    }
-
     var countMap: std.StringHashMap(Fields) = undefined;
     var keyBuffer: std.ArrayList(u8) = undefined;
     if (options.count) {
@@ -182,8 +200,7 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
                 lineBuffer.clearRetainingCapacity();
                 try formattedWriter(&lineWriter, SelectedFields.get(&fields), false);
 
-                if (!uniqueSet.?.contains(lineBuffer.items)) {
-                    try uniqueSet.?.put(try allocator.dupe(u8, lineBuffer.items), 1);
+                if (try UniqueAgregator.isNew(lineBuffer.items)) {
                     _ = try bufferedWriter.write(lineBuffer.items);
                 }
             } else if (options.count) {
