@@ -8,36 +8,18 @@ const Argument = enum {
     @"--help",
     @"-v",
     @"--version",
-    @"-t",
-    @"--tab",
-    @"-c",
-    @"--comma",
     @"-s",
-    @"--semicolon",
-    @"-p",
-    @"--pipe",
-    @"-d",
-    @"--doubleQuoute",
+    @"--separator",
     @"-q",
     @"--quoute",
-    @"--noQuote",
     @"-h",
     @"--header",
     @"-n",
     @"--noHeader",
-    @"-T",
-    @"--outputTab",
-    @"-C",
-    @"--outputComma",
     @"-S",
-    @"--outputSemicolon",
-    @"-P",
-    @"--outputPipe",
-    @"-D",
-    @"--outputDoubleQuoute",
+    @"--outputSeparator",
     @"-Q",
     @"--outputQuoute",
-    @"--outputNoQuote",
     @"-N",
     @"--outputNoHeader",
     @"-F",
@@ -54,6 +36,25 @@ const Argument = enum {
     @"--exitCodes",
     @"--unique",
     @"--count",
+};
+
+const Separator = enum {
+    comma,
+    @",",
+    semicolon,
+    @";",
+    pipe,
+    @"|",
+    tab,
+    @"\t",
+};
+
+const Quoute = enum {
+    no,
+    single,
+    @"'",
+    double,
+    @"\"",
 };
 
 const ExitCode = enum(u8) {
@@ -126,20 +127,10 @@ pub const Parser = struct {
                 }) {
                     .@"--help" => try printUsage(),
                     .@"-v", .@"--version" => try printVersion(),
-                    .@"-t", .@"--tab" => options.input_separator = .{'\t'},
-                    .@"-c", .@"--comma" => options.input_separator = .{','},
-                    .@"-s", .@"--semicolon" => options.input_separator = .{';'},
-                    .@"-p", .@"--pipe" => options.input_separator = .{'|'},
-                    .@"-d", .@"--doubleQuoute" => options.input_quoute = .{'"'},
-                    .@"-q", .@"--quoute" => options.input_quoute = .{'\''},
-                    .@"--noQuote" => options.input_quoute = null,
-                    .@"-T", .@"--outputTab" => options.output_separator = .{'\t'},
-                    .@"-C", .@"--outputComma" => options.output_separator = .{','},
-                    .@"-S", .@"--outputSemicolon" => options.output_separator = .{';'},
-                    .@"-P", .@"--outputPipe" => options.output_separator = .{'|'},
-                    .@"-D", .@"--outputDoubleQuoute" => options.output_quoute = .{'"'},
-                    .@"-Q", .@"--outputQuoute" => options.output_quoute = .{'\''},
-                    .@"--outputNoQuote" => options.output_quoute = null,
+                    .@"-s", .@"--separator" => options.input_separator = try getSeparator(args, index, arg),
+                    .@"-q", .@"--quoute" => options.input_quoute = try getQuoute(args, index, arg),
+                    .@"-S", .@"--outputSeparator" => options.output_separator = try getSeparator(args, index, arg),
+                    .@"-Q", .@"--outputQuoute" => options.output_quoute = try getQuoute(args, index, arg),
                     .@"--trim" => options.trim = true,
                     .@"-l", .@"--listHeader" => options.listHeader = true,
                     .@"--unique" => options.unique = true,
@@ -186,6 +177,31 @@ pub const Parser = struct {
             try ExitCode.noInputError.printErrorAndExit(.{});
         } else if (options.useStdin and options.inputFiles.items.len > 0) {
             try ExitCode.stdinOrFileError.printErrorAndExit(.{});
+        }
+    }
+
+    fn getSeparator(args: [][]u8, index: usize, arg: []const u8) ![1]u8 {
+        const sep = try argumentValue(args, index, arg);
+        skipNext();
+        switch (std.meta.stringToEnum(Separator, sep) orelse {
+            try ExitCode.argumentWithUnknownValueError.printErrorAndExit(.{ arg, sep });
+        }) {
+            .comma, .@"," => return .{','},
+            .semicolon, .@";" => return .{';'},
+            .tab, .@"\t" => return .{'\t'},
+            .pipe, .@"|" => return .{'|'},
+        }
+    }
+
+    fn getQuoute(args: [][]u8, index: usize, arg: []const u8) !?[1]u8 {
+        const quoute = try argumentValue(args, index, arg);
+        skipNext();
+        switch (std.meta.stringToEnum(Quoute, quoute) orelse {
+            try ExitCode.argumentWithUnknownValueError.printErrorAndExit(.{ arg, quoute });
+        }) {
+            .no => return null,
+            .single, .@"'" => return .{'\''},
+            .double, .@"\"" => return .{'"'},
         }
     }
 
