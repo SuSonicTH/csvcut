@@ -10,8 +10,13 @@ var allocator: std.mem.Allocator = undefined;
 var options: Options = undefined;
 
 pub fn main() !void {
+    var timer = try std.time.Timer.start();
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    allocator = gpa.allocator();
+    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    defer arena.deinit();
+    allocator = arena.allocator();
+
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
@@ -29,6 +34,12 @@ pub fn main() !void {
             try processFileByName(file);
         }
     }
+
+    const timeNeeded = @as(f32, @floatFromInt(timer.lap())) / 1000000.0;
+
+    const stderr = std.io.getStdErr().writer();
+    _ = try stderr.print("time needed: {d}ms\n", .{timeNeeded});
+    _ = try stderr.print("memory used: {d}b\n", .{arena.queryCapacity()});
 }
 
 fn processFileByName(fileName: []const u8) !void {
@@ -37,7 +48,6 @@ fn processFileByName(fileName: []const u8) !void {
     var lineReader = try MemMappedLineReader.init(file, .{});
     //var lineReader = try LineReader.init(file.reader(), allocator, .{});
     defer lineReader.deinit();
-
     try proccessFile(&lineReader, std.io.getStdOut());
 }
 
