@@ -109,7 +109,7 @@ const SelectedFields = struct {
 const SkipableLineReader = struct {
     var lineNumber: usize = 0;
 
-    fn init() void {
+    fn reset() void {
         lineNumber = 0;
     }
 
@@ -206,6 +206,8 @@ const OutputWriter = struct {
                 .Csv => &writeOutputCsv,
                 .LazyMarkdown => &writeOutputLazyMarkdown,
                 .LazyJira => &writeOutputLazyJira,
+                .Markdown => &writeOutputMarkdown,
+                .Jira => &writeOutputJira,
             };
             lineBuffer = try std.ArrayList(u8).initCapacity(allocator, 1024);
             initialized = true;
@@ -235,6 +237,10 @@ const OutputWriter = struct {
     }
 };
 
+var fieldWidths: [3]usize = .{ 0, 0, 0 };
+var spaces: []u8 = undefined;
+var dashes: []u8 = undefined;
+
 fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
     var csvLine = try CsvLine.init(allocator, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null });
     defer csvLine.free();
@@ -247,18 +253,58 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
     var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
     try OutputWriter.init(bufferedWriter.writer().any());
 
-    SkipableLineReader.init();
+    SkipableLineReader.reset();
     UniqueAgregator.init();
     try CountAggregator.init();
 
     if (options.fileHeader) {
+        _ = try std.io.getStdErr().writer().print("FILEHEADER: ", .{});
         if (try SkipableLineReader.readLine(lineReader)) |line| {
             try options.setHeader(line);
+            _ = try std.io.getStdErr().writer().print("{s}\n", .{line});
         }
     }
 
     try options.setSelectionIndices();
     try SelectedFields.init();
+
+    switch (options.outputFormat) {
+        .Markdown, .Jira => {
+            while (try SkipableLineReader.readLine(lineReader)) |line| {
+                const fields = try csvLine.parse(line);
+                if (noFilterOrfilterMatches(fields, options.filterFields)) {
+                    for (SelectedFields.get(&fields).*, 0..) |field, i| {
+                        if (options.outputFormat == .Markdown) {
+                            fieldWidths[i] = @max(fieldWidths[i], (try escapeMarkup(field, markdownSpecial)).len);
+                        } else {
+                            fieldWidths[i] = @max(fieldWidths[i], (try escapeMarkup(field, jiraSpecial)).len);
+                        }
+                    }
+                }
+            }
+
+            var maxSpace: usize = 0;
+            for (fieldWidths) |width| {
+                maxSpace = @max(maxSpace, width);
+                _ = try std.io.getStdErr().writer().print("{d}\n", .{width});
+            }
+            spaces = try allocator.alloc(u8, maxSpace);
+            @memset(spaces, ' ');
+            dashes = try allocator.alloc(u8, maxSpace);
+            @memset(dashes, '-');
+            _ = try std.io.getStdErr().writer().print(">{s}<\n", .{spaces});
+            _ = try std.io.getStdErr().writer().print(">{s}<\n", .{dashes});
+            try lineReader.reset();
+            SkipableLineReader.reset();
+            if (options.fileHeader) {
+                _ = try std.io.getStdErr().writer().print("skipHeader: ", .{});
+                if (try SkipableLineReader.readLine(lineReader)) |line| {
+                    _ = try std.io.getStdErr().writer().print("{s}\n", .{line});
+                }
+            }
+        },
+        else => {},
+    }
 
     if (options.header != null and options.outputHeader) {
         if (options.count) {
@@ -345,6 +391,27 @@ fn writeOutputLazyMarkdown(writer: *const std.io.AnyWriter, fields: *const [][]c
     }
 }
 
+fn writeOutputMarkdown(writer: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {
+    for (fields.*, 0..) |field, i| {
+        _ = try writer.write("| ");
+        _ = try writer.write(try escapeMarkup(field, markdownSpecial));
+        const len = fieldWidths[i] - field.len;
+        _ = try writer.write(spaces[0 .. len - 1]);
+        _ = try writer.write(" ");
+    }
+    _ = try writer.write("|\n");
+    if (isHeader) {
+        for (fields.*, 0..) |field, i| {
+            _ = field;
+            _ = try writer.write("| ");
+            const len = if (fieldWidths[i] < 3) 3 else fieldWidths[i];
+            _ = try writer.write(dashes[0..len]);
+            _ = try writer.write(" ");
+        }
+        _ = try writer.write("|\n");
+    }
+}
+
 var escapeBuffer: [1024]u8 = undefined;
 const markdownSpecial: []const u8 = "\\`*_{}[]<>()#+-.!|";
 const jiraSpecial: []const u8 = "*_-{|^+?#";
@@ -371,6 +438,24 @@ inline fn escapeMarkup(field: []const u8, comptime specialCharacters: []const u8
 }
 
 fn writeOutputLazyJira(writer: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {
+    if (!isHeader) {
+        for (fields.*) |field| {
+            _ = try writer.write("| ");
+            _ = try writer.write(try escapeMarkup(field, jiraSpecial));
+            _ = try writer.write(" ");
+        }
+        _ = try writer.write("|\n");
+    } else {
+        for (fields.*) |field| {
+            _ = try writer.write("|| ");
+            _ = try writer.write(try escapeMarkup(field, jiraSpecial));
+            _ = try writer.write(" ");
+        }
+        _ = try writer.write("||\n");
+    }
+}
+
+fn writeOutputJira(writer: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {
     if (!isHeader) {
         for (fields.*) |field| {
             _ = try writer.write("| ");

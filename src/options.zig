@@ -11,6 +11,8 @@ pub const OutputFormat = enum {
     Csv,
     LazyMarkdown,
     LazyJira,
+    Markdown,
+    Jira,
 };
 
 const SelectionType = enum {
@@ -76,7 +78,6 @@ pub const Options = struct {
 
     pub fn setHeader(self: *Options, header: []const u8) !void {
         self.header = try self.allocator.dupe([]const u8, try (try self.getCsvLine()).parse(header));
-        self.fileHeader = false;
     }
 
     fn getCsvLine(self: *Options) !*CsvLine {

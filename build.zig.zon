@@ -8,8 +8,8 @@
             .hash = "1220f0c9529cbb73cb3c762add6f2fd0cf13f4de0048ecb5bf3d41fb492603f87eed",
         },
         .LineReader = .{
-            .url = "https://github.com/SuSonicTH/zigLineReader/archive/00d6636715f186a2d491994cbf3663e867e7fdad.tar.gz",
-            .hash = "12201b981b18519e24ecaa2e2d4fe3ac6aec4ce5640389441bcca0f6e4e35e452c35",
+            .url = "https://github.com/SuSonicTH/zigLineReader/archive/c4d888865529b67ac7fa0713c6f615d0a12bca9b.tar.gz",
+            .hash = "1220b58b0c273d88ea6d118d193d60685036afd84453c79b0b9302ade85a371435ea",
         },
     },
     .paths = .{
