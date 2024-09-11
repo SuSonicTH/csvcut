@@ -145,6 +145,7 @@ pub const Parser = struct {
                     },
                     .@"-h", .@"--header" => {
                         try options.setHeader(try argumentValue(args, index, arg));
+                        options.fileHeader = false;
                         skipNext();
                     },
                     .@"-n", .@"--noHeader" => options.fileHeader = false,

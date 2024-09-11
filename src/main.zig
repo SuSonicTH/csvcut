@@ -25,7 +25,16 @@ pub fn main() !void {
 
     try ArgumentParser.parse(&options, args);
 
+    const stderr = std.io.getStdErr().writer();
+
     if (options.useStdin) {
+        switch (options.outputFormat) {
+            .Markdown, .Jira, .Table => {
+                _ = try stderr.print("the formats Markdown, Jira and Table can not be used with stdin\n", .{});
+                return;
+            },
+            else => {},
+        }
         var lineReader = try LineReader.init(std.io.getStdIn().reader(), allocator, .{});
         defer lineReader.deinit();
         try proccessFile(&lineReader, std.io.getStdOut());
@@ -36,9 +45,11 @@ pub fn main() !void {
     }
 
     const timeNeeded = @as(f32, @floatFromInt(timer.lap())) / 1000000.0;
-
-    const stderr = std.io.getStdErr().writer();
-    _ = try stderr.print("time needed: {d}ms\n", .{timeNeeded});
+    if (timeNeeded > 1000) {
+        _ = try stderr.print("time needed: {d:0.2}s\n", .{timeNeeded / 1000.0});
+    } else {
+        _ = try stderr.print("time needed: {d:0.2}ms\n", .{timeNeeded});
+    }
     _ = try stderr.print("memory used: {d}b\n", .{arena.queryCapacity()});
 }
 
@@ -109,7 +120,7 @@ const SelectedFields = struct {
 const SkipableLineReader = struct {
     var lineNumber: usize = 0;
 
-    fn init() void {
+    fn reset() void {
         lineNumber = 0;
     }
 
@@ -206,6 +217,9 @@ const OutputWriter = struct {
                 .Csv => &writeOutputCsv,
                 .LazyMarkdown => &writeOutputLazyMarkdown,
                 .LazyJira => &writeOutputLazyJira,
+                .Markdown => &writeOutputMarkdown,
+                .Jira => &writeOutputJira,
+                .Table => &writeOutputTable,
             };
             lineBuffer = try std.ArrayList(u8).initCapacity(allocator, 1024);
             initialized = true;
@@ -235,6 +249,11 @@ const OutputWriter = struct {
     }
 };
 
+var fieldWidths: [3]usize = .{ 0, 0, 0 };
+var spaces: []u8 = undefined;
+var dashes: []u8 = undefined;
+var lineDashes: []u8 = undefined;
+
 fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
     var csvLine = try CsvLine.init(allocator, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null });
     defer csvLine.free();
@@ -247,7 +266,7 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
     var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
     try OutputWriter.init(bufferedWriter.writer().any());
 
-    SkipableLineReader.init();
+    SkipableLineReader.reset();
     UniqueAgregator.init();
     try CountAggregator.init();
 
@@ -259,6 +278,46 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
 
     try options.setSelectionIndices();
     try SelectedFields.init();
+
+    switch (options.outputFormat) {
+        .Markdown, .Jira, .Table => {
+            while (try SkipableLineReader.readLine(lineReader)) |line| {
+                const fields = try csvLine.parse(line);
+                if (noFilterOrfilterMatches(fields, options.filterFields)) {
+                    for (SelectedFields.get(&fields).*, 0..) |field, i| {
+                        switch (options.outputFormat) {
+                            .Markdown => fieldWidths[i] = @max(fieldWidths[i], (try escapeMarkup(field, markdownSpecial)).len),
+                            .Jira => fieldWidths[i] = @max(fieldWidths[i], (try escapeMarkup(field, jiraSpecial)).len),
+                            .Table => fieldWidths[i] = @max(fieldWidths[i], field.len),
+                            else => undefined,
+                        }
+                    }
+                }
+            }
+
+            var maxSpace: usize = 0;
+            for (fieldWidths) |width| {
+                maxSpace = @max(maxSpace, width);
+            }
+            spaces = try allocator.alloc(u8, maxSpace + 1); //todo: free
+            @memset(spaces, ' ');
+            dashes = try allocator.alloc(u8, maxSpace); //todo: free
+            @memset(dashes, '-');
+            lineDashes = try allocator.alloc(u8, maxSpace); //todo: free
+            for (0..maxSpace) |i| {
+                std.mem.copyForwards(u8, lineDashes[(i * 3)..], "─");
+            }
+
+            try lineReader.reset();
+            SkipableLineReader.reset();
+            if (options.fileHeader) {
+                if (try SkipableLineReader.readLine(lineReader)) |line| {
+                    _ = line;
+                }
+            }
+        },
+        else => {},
+    }
 
     if (options.header != null and options.outputHeader) {
         if (options.count) {
@@ -299,6 +358,9 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
         }
     }
 
+    if (options.outputFormat == .Table) {
+        try writeTableLine(&bufferedWriter.writer().any(), fieldWidths.len, "└", "┴", "┘\n");
+    }
     try bufferedWriter.flush();
 }
 
@@ -345,6 +407,29 @@ fn writeOutputLazyMarkdown(writer: *const std.io.AnyWriter, fields: *const [][]c
     }
 }
 
+fn writeOutputMarkdown(writer: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {
+    for (fields.*, 0..) |field, i| {
+        const escaped = try escapeMarkup(field, jiraSpecial);
+        const len = fieldWidths[i] - escaped.len + 1;
+
+        _ = try writer.write("| ");
+        _ = try writer.write(escaped);
+        _ = try writer.write(spaces[0..len]);
+    }
+    _ = try writer.write("|\n");
+    if (isHeader) {
+        for (fields.*, 0..) |field, i| {
+            _ = field;
+            const len = if (fieldWidths[i] < 3) 3 else fieldWidths[i];
+
+            _ = try writer.write("| ");
+            _ = try writer.write(dashes[0..len]);
+            _ = try writer.write(" ");
+        }
+        _ = try writer.write("|\n");
+    }
+}
+
 var escapeBuffer: [1024]u8 = undefined;
 const markdownSpecial: []const u8 = "\\`*_{}[]<>()#+-.!|";
 const jiraSpecial: []const u8 = "*_-{|^+?#";
@@ -371,21 +456,80 @@ inline fn escapeMarkup(field: []const u8, comptime specialCharacters: []const u8
 }
 
 fn writeOutputLazyJira(writer: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {
-    if (!isHeader) {
+    if (isHeader) {
+        for (fields.*) |field| {
+            _ = try writer.write("||");
+            _ = try writer.write(try escapeMarkup(field, jiraSpecial));
+            _ = try writer.write(" ");
+        }
+        _ = try writer.write("||\n");
+    } else {
         for (fields.*) |field| {
             _ = try writer.write("| ");
             _ = try writer.write(try escapeMarkup(field, jiraSpecial));
             _ = try writer.write(" ");
         }
         _ = try writer.write("|\n");
-    } else {
-        for (fields.*) |field| {
-            _ = try writer.write("|| ");
-            _ = try writer.write(try escapeMarkup(field, jiraSpecial));
-            _ = try writer.write(" ");
+    }
+}
+
+fn writeOutputJira(writer: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {
+    if (isHeader) {
+        for (fields.*, 0..) |field, i| {
+            const escaped = try escapeMarkup(field, jiraSpecial);
+            const len = fieldWidths[i] - escaped.len + 1;
+
+            _ = try writer.write("||");
+            _ = try writer.write(escaped);
+            _ = try writer.write(spaces[0..len]);
         }
         _ = try writer.write("||\n");
+    } else {
+        for (fields.*, 0..) |field, i| {
+            const escaped = try escapeMarkup(field, jiraSpecial);
+            const len = fieldWidths[i] - escaped.len + 1;
+
+            _ = try writer.write("| ");
+            _ = try writer.write(try escapeMarkup(field, jiraSpecial));
+            _ = try writer.write(spaces[0..len]);
+        }
+        _ = try writer.write("|\n");
     }
+}
+
+fn writeOutputTable(writer: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {
+    if (isHeader) {
+        try writeTableLine(writer, fields.len, "┌", "┬", "┐\n");
+        for (fields.*, 0..) |field, i| {
+            const len = fieldWidths[i] - field.len;
+            _ = try writer.write("│");
+            _ = try writer.write(field);
+            _ = try writer.write(spaces[0..len]);
+        }
+        _ = try writer.write("│\n");
+        try writeTableLine(writer, fields.len, "├", "┼", "┤\n");
+    } else {
+        //try writeTableLine(writer, fields.len);
+        for (fields.*, 0..) |field, i| {
+            const len = fieldWidths[i] - field.len + 1;
+            _ = try writer.write("│");
+            _ = try writer.write(field);
+            _ = try writer.write(spaces[0 .. len - 1]);
+        }
+        _ = try writer.write("│\n");
+    }
+}
+
+inline fn writeTableLine(writer: *const std.io.AnyWriter, len: usize, left: []const u8, middle: []const u8, right: []const u8) !void {
+    for (0..len) |i| {
+        if (i == 0) {
+            _ = try writer.write(left);
+        } else {
+            _ = try writer.write(middle);
+        }
+        _ = try writer.write(lineDashes[0 .. fieldWidths[i] * 3]);
+    }
+    _ = try writer.write(right);
 }
 
 inline fn noFilterOrfilterMatches(fields: [][]const u8, filterFields: ?std.ArrayList(Filter)) bool {
