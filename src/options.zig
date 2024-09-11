@@ -13,6 +13,7 @@ pub const OutputFormat = enum {
     LazyJira,
     Markdown,
     Jira,
+    Table,
 };
 
 const SelectionType = enum {
