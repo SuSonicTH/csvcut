@@ -25,11 +25,15 @@ Options:
      -n, --noHeader             file has no header
          --skipLines list       skip lines numbers in list
                                 indices as 0-based, header has zero index
+         --inputLimit  lim      limit the input processing to lim lines
 
   output formats:
      --format Csv               csv file for format options see output section
-     --format LazyMarkdown      compact markdown table format NOT formatted
-     --format LazyJira          compact jira markup table format NOT formatted
+     --format LazyMarkdown      compact markdown table format 
+     --format Markdown          evenly spaced markdown table format (slower)
+     --format LazyJira          compact jira/confluence markup table format
+     --format Jira              evenly spaced jira/confluence table format (slower)
+     --format Table             evenly spaced console table format (slower)
 
   output:
      -S, --outputSeparator sep  use sep as input field separator
@@ -45,8 +49,10 @@ Options:
             single (')
             double (")
 
-     -N, --outputNoHeader       don't write header to output
-        
+     -N, --outputNoHeader      don't write header to output
+         
+         --outputLimit lim     limit the the number of lines outputted to lim
+
   processing:
      -F, --fields              comma separated list of field names to output
                                can be used multiple times

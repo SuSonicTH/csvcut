@@ -9,6 +9,7 @@ const ArgumentParser = @import("arguments.zig").Parser;
 var allocator: std.mem.Allocator = undefined;
 var options: Options = undefined;
 
+//todo: table output needs to execute "chcp.com 65001 > NUL" on windows
 pub fn main() !void {
     var timer = try std.time.Timer.start();
 
@@ -119,19 +120,29 @@ const SelectedFields = struct {
 
 const SkipableLineReader = struct {
     var lineNumber: usize = 0;
+    var linesRead: usize = 0;
 
     fn reset() void {
         lineNumber = 0;
     }
 
+    fn resetLinesRead() void {
+        linesRead = 0;
+    }
+
     inline fn readLine(lineReader: anytype) !?[]const u8 {
+        if (options.inputLimit > 0 and options.inputLimit == linesRead) {
+            return null;
+        }
         if (options.skipLine != null) {
             while (options.skipLine.?.get(lineNumber) != null) {
                 _ = try lineReader.readLine();
                 lineNumber += 1;
+                linesRead += 1;
             }
         }
         lineNumber += 1;
+        linesRead += 1;
         return lineReader.readLine();
     }
 };
@@ -274,6 +285,7 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
         if (try SkipableLineReader.readLine(lineReader)) |line| {
             try options.setHeader(line);
         }
+        SkipableLineReader.resetLinesRead();
     }
 
     try options.setSelectionIndices();
@@ -333,6 +345,7 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
         try options.setFilterIndices();
     }
 
+    var linesWritten: usize = 0;
     while (try SkipableLineReader.readLine(lineReader)) |line| {
         const fields = try csvLine.parse(line);
 
@@ -342,11 +355,16 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
 
                 if (try UniqueAgregator.isNew(OutputWriter.getBuffer())) {
                     try OutputWriter.commitBuffer();
+                    linesWritten += 1;
                 }
             } else if (options.count) {
                 try CountAggregator.add(&fields);
             } else {
                 try OutputWriter.writeDirect(SelectedFields.get(&fields), false);
+                linesWritten += 1;
+            }
+            if (options.outputLimit != 0 and linesWritten >= options.outputLimit) {
+                break;
             }
         }
     }
@@ -355,6 +373,10 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
         var iterator = CountAggregator.countMap.iterator();
         while (iterator.next()) |entry| {
             try OutputWriter.writeDirect(try entry.value_ptr.get(), false);
+            linesWritten += 1;
+            if (options.outputLimit != 0 and linesWritten >= options.outputLimit) {
+                break;
+            }
         }
     }
 

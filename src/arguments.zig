@@ -36,6 +36,8 @@ const Argument = enum {
     @"--exitCodes",
     @"--unique",
     @"--count",
+    @"--inputLimit",
+    @"--outputLimit",
 };
 
 const Separator = enum {
@@ -168,6 +170,14 @@ pub const Parser = struct {
                         skipNext();
                     },
                     .@"--exitCodes" => try ExitCode.printExitCodes(),
+                    .@"--inputLimit" => {
+                        try options.setInputLimit(try argumentValue(args, index, arg));
+                        skipNext();
+                    },
+                    .@"--outputLimit" => {
+                        try options.setOutputLimit(try argumentValue(args, index, arg));
+                        skipNext();
+                    },
                 }
             } else {
                 try options.inputFiles.append(arg);

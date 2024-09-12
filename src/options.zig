@@ -53,6 +53,8 @@ pub const Options = struct {
     skipLine: ?std.AutoHashMap(usize, bool) = null,
     unique: bool = false,
     count: bool = false,
+    inputLimit: usize = 0,
+    outputLimit: usize = 0,
 
     pub fn init(allocator: std.mem.Allocator) !Options {
         return .{
@@ -156,5 +158,13 @@ pub const Options = struct {
             const lineNumber = try std.fmt.parseInt(usize, item, 10);
             try self.skipLine.?.put(lineNumber, true);
         }
+    }
+
+    pub fn setInputLimit(self: *Options, value: []const u8) !void {
+        self.inputLimit = try std.fmt.parseInt(usize, value, 10);
+    }
+
+    pub fn setOutputLimit(self: *Options, value: []const u8) !void {
+        self.outputLimit = try std.fmt.parseInt(usize, value, 10);
     }
 };

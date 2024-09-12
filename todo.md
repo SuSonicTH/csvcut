@@ -1,7 +1,6 @@
 # csvcut todos
 
 ## additional features
-* limit and preview option to limit the number of lines outputted (preview would be fixed to 10 rows)
 * diff 2 csv files
 * paged output
 * option to filter the last x lines (trailer), maybe as part of index filter with negative sign (i.e. --filterLine -1,-2 filters last 2 lines)
