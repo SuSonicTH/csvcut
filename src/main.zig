@@ -124,6 +124,7 @@ const SkipableLineReader = struct {
 
     fn reset() void {
         lineNumber = 0;
+        linesRead = 0;
     }
 
     fn resetLinesRead() void {
@@ -260,10 +261,85 @@ const OutputWriter = struct {
     }
 };
 
-var fieldWidths: [3]usize = .{ 0, 0, 0 };
-var spaces: []u8 = undefined;
-var dashes: []u8 = undefined;
-var lineDashes: []u8 = undefined;
+const FieldWidths = struct {
+    var widths: []usize = undefined;
+    var spaces: []u8 = undefined;
+    var dashes: []u8 = undefined;
+    var lineDashes: []u8 = undefined;
+    var maxSpace: usize = undefined;
+
+    fn calculate(lineReader: anytype, csvLine: *CsvLine) !void {
+        switch (options.outputFormat) {
+            .Markdown, .Jira, .Table => {
+                if (options.fileHeader) {
+                    try resetReader(lineReader);
+                }
+
+                try collectWidths(lineReader, csvLine);
+                calculateMaxSpace();
+                try initPaddingStrings();
+
+                try resetReader(lineReader);
+                try skipFileHeader(lineReader);
+            },
+            else => {},
+        }
+    }
+
+    fn resetReader(lineReader: anytype) !void {
+        try lineReader.reset();
+        SkipableLineReader.reset();
+    }
+
+    fn collectWidths(lineReader: anytype, csvLine: *CsvLine) !void {
+        var fieldWidths: std.ArrayList(usize) = try std.ArrayList(usize).initCapacity(allocator, 16);
+        while (try SkipableLineReader.readLine(lineReader)) |line| {
+            const fields = try csvLine.parse(line);
+            if (noFilterOrfilterMatches(fields, options.filterFields)) {
+                for (SelectedFields.get(&fields).*, 0..) |field, i| {
+                    if (i + 1 > fieldWidths.items.len) {
+                        try fieldWidths.append(0);
+                    }
+                    switch (options.outputFormat) {
+                        .Markdown => widths[i] = @max(fieldWidths.items[i], (try escapeMarkup(field, markdownSpecial)).len),
+                        .Jira => fieldWidths.items[i] = @max(fieldWidths.items[i], (try escapeMarkup(field, jiraSpecial)).len),
+                        .Table => fieldWidths.items[i] = @max(fieldWidths.items[i], field.len),
+                        else => undefined,
+                    }
+                }
+            }
+        }
+        widths = try fieldWidths.toOwnedSlice();
+    }
+
+    fn calculateMaxSpace() void {
+        maxSpace = 0;
+        for (widths) |width| {
+            maxSpace = @max(maxSpace, width);
+        }
+    }
+
+    fn initPaddingStrings() !void {
+        spaces = try allocator.alloc(u8, maxSpace + 1); //todo: free
+        @memset(spaces, ' ');
+
+        dashes = try allocator.alloc(u8, maxSpace); //todo: free
+        @memset(dashes, '-');
+
+        lineDashes = try allocator.alloc(u8, maxSpace * 3); //todo: free
+        for (0..maxSpace) |i| {
+            std.mem.copyForwards(u8, lineDashes[(i * 3)..], "─");
+        }
+    }
+
+    fn skipFileHeader(lineReader: anytype) !void {
+        if (options.fileHeader) {
+            if (try SkipableLineReader.readLine(lineReader)) |line| {
+                _ = line;
+            }
+        }
+    }
+};
 
 fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
     var csvLine = try CsvLine.init(allocator, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null });
@@ -291,45 +367,7 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
     try options.setSelectionIndices();
     try SelectedFields.init();
 
-    switch (options.outputFormat) {
-        .Markdown, .Jira, .Table => {
-            while (try SkipableLineReader.readLine(lineReader)) |line| {
-                const fields = try csvLine.parse(line);
-                if (noFilterOrfilterMatches(fields, options.filterFields)) {
-                    for (SelectedFields.get(&fields).*, 0..) |field, i| {
-                        switch (options.outputFormat) {
-                            .Markdown => fieldWidths[i] = @max(fieldWidths[i], (try escapeMarkup(field, markdownSpecial)).len),
-                            .Jira => fieldWidths[i] = @max(fieldWidths[i], (try escapeMarkup(field, jiraSpecial)).len),
-                            .Table => fieldWidths[i] = @max(fieldWidths[i], field.len),
-                            else => undefined,
-                        }
-                    }
-                }
-            }
-
-            var maxSpace: usize = 0;
-            for (fieldWidths) |width| {
-                maxSpace = @max(maxSpace, width);
-            }
-            spaces = try allocator.alloc(u8, maxSpace + 1); //todo: free
-            @memset(spaces, ' ');
-            dashes = try allocator.alloc(u8, maxSpace); //todo: free
-            @memset(dashes, '-');
-            lineDashes = try allocator.alloc(u8, maxSpace); //todo: free
-            for (0..maxSpace) |i| {
-                std.mem.copyForwards(u8, lineDashes[(i * 3)..], "─");
-            }
-
-            try lineReader.reset();
-            SkipableLineReader.reset();
-            if (options.fileHeader) {
-                if (try SkipableLineReader.readLine(lineReader)) |line| {
-                    _ = line;
-                }
-            }
-        },
-        else => {},
-    }
+    try FieldWidths.calculate(lineReader, &csvLine);
 
     if (options.header != null and options.outputHeader) {
         if (options.count) {
@@ -381,7 +419,7 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
     }
 
     if (options.outputFormat == .Table) {
-        try writeTableLine(&bufferedWriter.writer().any(), fieldWidths.len, "└", "┴", "┘\n");
+        try writeTableLine(&bufferedWriter.writer().any(), FieldWidths.widths.len, "└", "┴", "┘\n");
     }
     try bufferedWriter.flush();
 }
@@ -432,20 +470,20 @@ fn writeOutputLazyMarkdown(writer: *const std.io.AnyWriter, fields: *const [][]c
 fn writeOutputMarkdown(writer: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {
     for (fields.*, 0..) |field, i| {
         const escaped = try escapeMarkup(field, jiraSpecial);
-        const len = fieldWidths[i] - escaped.len + 1;
+        const len = FieldWidths.widths[i] - escaped.len + 1;
 
         _ = try writer.write("| ");
         _ = try writer.write(escaped);
-        _ = try writer.write(spaces[0..len]);
+        _ = try writer.write(FieldWidths.spaces[0..len]);
     }
     _ = try writer.write("|\n");
     if (isHeader) {
         for (fields.*, 0..) |field, i| {
             _ = field;
-            const len = if (fieldWidths[i] < 3) 3 else fieldWidths[i];
+            const len = if (FieldWidths.widths[i] < 3) 3 else FieldWidths.widths[i];
 
             _ = try writer.write("| ");
-            _ = try writer.write(dashes[0..len]);
+            _ = try writer.write(FieldWidths.dashes[0..len]);
             _ = try writer.write(" ");
         }
         _ = try writer.write("|\n");
@@ -499,21 +537,21 @@ fn writeOutputJira(writer: *const std.io.AnyWriter, fields: *const [][]const u8,
     if (isHeader) {
         for (fields.*, 0..) |field, i| {
             const escaped = try escapeMarkup(field, jiraSpecial);
-            const len = fieldWidths[i] - escaped.len + 1;
+            const len = FieldWidths.widths[i] - escaped.len + 1;
 
             _ = try writer.write("||");
             _ = try writer.write(escaped);
-            _ = try writer.write(spaces[0..len]);
+            _ = try writer.write(FieldWidths.spaces[0..len]);
         }
         _ = try writer.write("||\n");
     } else {
         for (fields.*, 0..) |field, i| {
             const escaped = try escapeMarkup(field, jiraSpecial);
-            const len = fieldWidths[i] - escaped.len + 1;
+            const len = FieldWidths.widths[i] - escaped.len + 1;
 
             _ = try writer.write("| ");
             _ = try writer.write(try escapeMarkup(field, jiraSpecial));
-            _ = try writer.write(spaces[0..len]);
+            _ = try writer.write(FieldWidths.spaces[0..len]);
         }
         _ = try writer.write("|\n");
     }
@@ -523,20 +561,20 @@ fn writeOutputTable(writer: *const std.io.AnyWriter, fields: *const [][]const u8
     if (isHeader) {
         try writeTableLine(writer, fields.len, "┌", "┬", "┐\n");
         for (fields.*, 0..) |field, i| {
-            const len = fieldWidths[i] - field.len;
+            const len = FieldWidths.widths[i] - field.len;
             _ = try writer.write("│");
             _ = try writer.write(field);
-            _ = try writer.write(spaces[0..len]);
+            _ = try writer.write(FieldWidths.spaces[0..len]);
         }
         _ = try writer.write("│\n");
         try writeTableLine(writer, fields.len, "├", "┼", "┤\n");
     } else {
         //try writeTableLine(writer, fields.len);
         for (fields.*, 0..) |field, i| {
-            const len = fieldWidths[i] - field.len + 1;
+            const len = FieldWidths.widths[i] - field.len + 1;
             _ = try writer.write("│");
             _ = try writer.write(field);
-            _ = try writer.write(spaces[0 .. len - 1]);
+            _ = try writer.write(FieldWidths.spaces[0 .. len - 1]);
         }
         _ = try writer.write("│\n");
     }
@@ -549,7 +587,7 @@ inline fn writeTableLine(writer: *const std.io.AnyWriter, len: usize, left: []co
         } else {
             _ = try writer.write(middle);
         }
-        _ = try writer.write(lineDashes[0 .. fieldWidths[i] * 3]);
+        _ = try writer.write(FieldWidths.lineDashes[0 .. FieldWidths.widths[i] * 3]);
     }
     _ = try writer.write(right);
 }
