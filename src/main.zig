@@ -5,7 +5,7 @@ const CsvLine = @import("CsvLine").CsvLine;
 const Options = @import("options.zig").Options;
 const Filter = @import("options.zig").Filter;
 const ArgumentParser = @import("arguments.zig").Parser;
-const builtin = @import("builtin");
+const Utf8Output = @import("Utf8Output.zig");
 
 var allocator: std.mem.Allocator = undefined;
 var options: Options = undefined;
@@ -64,33 +64,6 @@ fn processFileByName(fileName: []const u8) !void {
     defer lineReader.deinit();
     try proccessFile(&lineReader, std.io.getStdOut());
 }
-
-const Utf8Output = struct {
-    const windows = std.os.windows;
-
-    extern "kernel32" fn GetConsoleOutputCP() callconv(windows.WINAPI) windows.UINT;
-    extern "kernel32" fn SetConsoleOutputCP(codepage: windows.UINT) callconv(windows.WINAPI) windows.BOOL;
-
-    const utf8CodePage: windows.UINT = 65001;
-    var oldCodePage: windows.UINT = 0;
-
-    fn init() void {
-        if (builtin.os.tag == .windows) {
-            oldCodePage = GetConsoleOutputCP();
-            if (oldCodePage != utf8CodePage) {
-                _ = SetConsoleOutputCP(utf8CodePage);
-            }
-        }
-    }
-
-    fn deinit() void {
-        if (builtin.os.tag == .windows) {
-            if (oldCodePage > 0 and oldCodePage != utf8CodePage) {
-                _ = SetConsoleOutputCP(oldCodePage);
-            }
-        }
-    }
-};
 
 const Fields = struct {
     fields: [][]const u8,
