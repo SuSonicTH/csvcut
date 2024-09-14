@@ -32,7 +32,7 @@ pub fn main() !void {
 
     if (options.useStdin) {
         switch (options.outputFormat) {
-            .Markdown, .Jira, .Table => {
+            .markdown, .jira, .table => {
                 _ = try stderr.print("the formats Markdown, Jira and Table can not be used with stdin\n", .{});
                 return;
             },
@@ -228,12 +228,13 @@ const OutputWriter = struct {
     fn init(writer: std.io.AnyWriter) !void {
         if (!initialized) {
             formattedWriter = switch (options.outputFormat) {
-                .Csv => &writeOutputCsv,
-                .LazyMarkdown => &writeOutputLazyMarkdown,
-                .LazyJira => &writeOutputLazyJira,
-                .Markdown => &writeOutputMarkdown,
-                .Jira => &writeOutputJira,
-                .Table => &writeOutputTable,
+                .csv => &writeOutputCsv,
+                .lazyMarkdown => &writeOutputLazyMarkdown,
+                .lazyJira => &writeOutputLazyJira,
+                .markdown => &writeOutputMarkdown,
+                .jira => &writeOutputJira,
+                .table => &writeOutputTable,
+                .html => &writeOutputhtml,
             };
             lineBuffer = try std.ArrayList(u8).initCapacity(allocator, 1024);
             initialized = true;
@@ -272,7 +273,7 @@ const FieldWidths = struct {
 
     fn calculate(lineReader: anytype, csvLine: *CsvLine) !void {
         switch (options.outputFormat) {
-            .Markdown, .Jira, .Table => {
+            .markdown, .jira, .table => {
                 if (options.fileHeader) {
                     try resetReader(lineReader);
                 }
@@ -303,9 +304,9 @@ const FieldWidths = struct {
                         try fieldWidths.append(0);
                     }
                     switch (options.outputFormat) {
-                        .Markdown => widths[i] = @max(fieldWidths.items[i], (try escapeMarkup(field, markdownSpecial)).len),
-                        .Jira => fieldWidths.items[i] = @max(fieldWidths.items[i], (try escapeMarkup(field, jiraSpecial)).len),
-                        .Table => fieldWidths.items[i] = @max(fieldWidths.items[i], field.len),
+                        .markdown => widths[i] = @max(fieldWidths.items[i], (try escapeMarkup(field, markdownSpecial)).len),
+                        .jira => fieldWidths.items[i] = @max(fieldWidths.items[i], (try escapeMarkup(field, jiraSpecial)).len),
+                        .table => fieldWidths.items[i] = @max(fieldWidths.items[i], field.len),
                         else => undefined,
                     }
                 }
@@ -420,8 +421,10 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
         }
     }
 
-    if (options.outputFormat == .Table) {
+    if (options.outputFormat == .table) {
         try writeTableLine(&bufferedWriter.writer().any(), FieldWidths.widths.len, "└", "┴", "┘\n");
+    } else if (options.outputFormat == .html) {
+        _ = try bufferedWriter.writer().write("</table></body></html>");
     }
     try bufferedWriter.flush();
 }
@@ -592,6 +595,27 @@ inline fn writeTableLine(writer: *const std.io.AnyWriter, len: usize, left: []co
         _ = try writer.write(FieldWidths.lineDashes[0 .. FieldWidths.widths[i] * 3]);
     }
     _ = try writer.write(right);
+}
+
+fn writeOutputhtml(writer: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {
+    if (isHeader) {
+        _ = try writer.write("<html><body><table>\n");
+        _ = try writer.write("<tr>");
+        for (fields.*) |field| {
+            _ = try writer.write("<th>");
+            _ = try writer.write(field);
+            _ = try writer.write("</th>");
+        }
+        _ = try writer.write("</tr>\n");
+    } else {
+        _ = try writer.write("<tr>");
+        for (fields.*) |field| {
+            _ = try writer.write("<td>");
+            _ = try writer.write(field);
+            _ = try writer.write("</td>");
+        }
+        _ = try writer.write("</tr>\n");
+    }
 }
 
 inline fn noFilterOrfilterMatches(fields: [][]const u8, filterFields: ?std.ArrayList(Filter)) bool {

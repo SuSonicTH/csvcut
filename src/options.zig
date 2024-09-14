@@ -8,12 +8,13 @@ pub const Filter = struct {
 };
 
 pub const OutputFormat = enum {
-    Csv,
-    LazyMarkdown,
-    LazyJira,
-    Markdown,
-    Jira,
-    Table,
+    csv,
+    lazyMarkdown,
+    lazyJira,
+    markdown,
+    jira,
+    table,
+    html,
 };
 
 const SelectionType = enum {
@@ -46,7 +47,7 @@ pub const Options = struct {
     selectionIndices: ?[]usize = null,
     trim: bool = false,
     filterFields: ?std.ArrayList(Filter) = null,
-    outputFormat: OutputFormat = .Csv,
+    outputFormat: OutputFormat = .csv,
     listHeader: bool = false,
     useStdin: bool = false,
     inputFiles: std.ArrayList([]const u8),
