@@ -28,12 +28,13 @@ Options:
          --inputLimit  lim      limit the input processing to lim lines
 
   output formats:
-     --format Csv               csv file for format options see output section
-     --format LazyMarkdown      compact markdown table format 
-     --format Markdown          evenly spaced markdown table format (slower)
-     --format LazyJira          compact jira/confluence markup table format
-     --format Jira              evenly spaced jira/confluence table format (slower)
-     --format Table             evenly spaced console table format (slower)
+     --format csv               csv file for format options see output section
+     --format lazyMarkdown      compact markdown table format 
+     --format markdown          evenly spaced markdown table format (slower)
+     --format lazyJira          compact jira/confluence markup table format
+     --format jira              evenly spaced jira/confluence table format (slower)
+     --format table             evenly spaced console table format (slower)
+     --format html              plain html with a table
 
   output:
      -S, --outputSeparator sep  use sep as input field separator
