@@ -1,6 +1,5 @@
 const std = @import("std");
 const LineReader = @import("LineReader").LineReader;
-const MemMappedLineReader = @import("LineReader").MemMappedLineReader;
 const CsvLine = @import("CsvLine").CsvLine;
 const Options = @import("options.zig").Options;
 const Filter = @import("options.zig").Filter;
@@ -38,7 +37,7 @@ pub fn main() !void {
             },
             else => {},
         }
-        var lineReader = try LineReader.init(std.io.getStdIn().reader(), allocator, .{});
+        var lineReader = try LineReader.initReader(std.io.getStdIn().reader().any(), allocator, .{});
         defer lineReader.deinit();
         try proccessFile(&lineReader, std.io.getStdOut());
     } else {
@@ -57,10 +56,9 @@ pub fn main() !void {
 }
 
 fn processFileByName(fileName: []const u8) !void {
-    const file = try std.fs.cwd().openFile(fileName, .{});
+    var file = try std.fs.cwd().openFile(fileName, .{});
     defer file.close();
-    var lineReader = try MemMappedLineReader.init(file, .{});
-    //var lineReader = try LineReader.init(file.reader(), allocator, .{});
+    var lineReader = try LineReader.initFile(&file, allocator, .{});
     defer lineReader.deinit();
     try proccessFile(&lineReader, std.io.getStdOut());
 }
@@ -344,7 +342,7 @@ const FieldWidths = struct {
     }
 };
 
-fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
+fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
     var csvLine = try CsvLine.init(allocator, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null });
     defer csvLine.free();
 
@@ -429,7 +427,7 @@ fn proccessFile(lineReader: anytype, outputFile: std.fs.File) !void {
     try bufferedWriter.flush();
 }
 
-fn listHeader(lineReader: anytype, csvLine: *CsvLine) !void {
+fn listHeader(lineReader: *LineReader, csvLine: *CsvLine) !void {
     const out = std.io.getStdOut();
     if (try lineReader.readLine()) |line| {
         for (try csvLine.parse(line)) |field| {
