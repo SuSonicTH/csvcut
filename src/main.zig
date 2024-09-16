@@ -576,10 +576,10 @@ fn writeOutputTable(writer: *const std.io.AnyWriter, fields: *const [][]const u8
     } else {
         //try writeTableLine(writer, fields.len);
         for (fields.*, 0..) |field, i| {
-            const len = FieldWidths.widths[i] - field.len + 1;
+            const len = FieldWidths.widths[i] - field.len;
             _ = try writer.write("│");
             _ = try writer.write(field);
-            _ = try writer.write(FieldWidths.spaces[0 .. len - 1]);
+            _ = try writer.write(FieldWidths.spaces[0..len]);
         }
         _ = try writer.write("│\n");
     }
