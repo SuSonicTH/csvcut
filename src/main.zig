@@ -6,6 +6,7 @@ const Filter = @import("options.zig").Filter;
 const ArgumentParser = @import("arguments.zig").Parser;
 const Utf8Output = @import("Utf8Output.zig");
 const SkipableLineReader = @import("SkipableLineReader.zig");
+const FormatWriter = @import("FormatWriter.zig").FormatWriter;
 
 var allocator: std.mem.Allocator = undefined;
 var options: Options = undefined;
@@ -189,22 +190,14 @@ const CountAggregator = struct {
 const FormattedWriter = *const fn (*const std.io.AnyWriter, *const [][]const u8, bool) anyerror!void;
 
 const OutputWriter = struct {
-    var formattedWriter: FormattedWriter = undefined;
+    var formatWriter: FormatWriter = undefined;
     var lineBuffer: std.ArrayList(u8) = undefined;
     var outputWriter: std.io.AnyWriter = undefined;
     var initialized = false;
 
     fn init(writer: std.io.AnyWriter) !void {
         if (!initialized) {
-            formattedWriter = switch (options.outputFormat) {
-                .csv => &writeOutputCsv,
-                .lazyMarkdown => &writeOutputLazyMarkdown,
-                .lazyJira => &writeOutputLazyJira,
-                .markdown => &writeOutputMarkdown,
-                .jira => &writeOutputJira,
-                .table => &writeOutputTable,
-                .html => &writeOutputhtml,
-            };
+            formatWriter = try FormatWriter.init(options.outputFormat, .{ .csv = .{ .separator = options.output_separator, .quoute = options.output_quoute } });
             lineBuffer = try std.ArrayList(u8).initCapacity(allocator, 1024);
             initialized = true;
         }
@@ -217,7 +210,11 @@ const OutputWriter = struct {
 
     fn writeBuffered(fields: *const [][]const u8, isHeader: bool) !void {
         lineBuffer.clearRetainingCapacity();
-        try formattedWriter(&lineBuffer.writer().any(), fields, isHeader);
+        if (isHeader) {
+            try formatWriter.writeHeader(&lineBuffer.writer().any(), fields);
+        } else {
+            try formatWriter.writeData(&lineBuffer.writer().any(), fields);
+        }
     }
 
     fn getBuffer() []u8 {
@@ -225,7 +222,11 @@ const OutputWriter = struct {
     }
 
     fn writeDirect(fields: *const [][]const u8, isHeader: bool) !void {
-        try formattedWriter(&outputWriter, fields, isHeader);
+        if (isHeader) {
+            try formatWriter.writeHeader(&outputWriter, fields);
+        } else {
+            try formatWriter.writeData(&outputWriter, fields);
+        }
     }
 
     fn commitBuffer() !void {
