@@ -100,7 +100,7 @@ pub const Options = struct {
         }
     }
 
-    pub fn setSelectionIndices(self: *Options) !void {
+    pub fn calculateSelectionIndices(self: *Options) !void {
         if (self.selectedFields == null or self.selectionIndices != null) return;
         self.selectionIndices = try self.allocator.alloc(usize, self.selectedFields.?.items.len);
 

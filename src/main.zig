@@ -7,6 +7,7 @@ const ArgumentParser = @import("arguments.zig").Parser;
 const Utf8Output = @import("Utf8Output.zig");
 const SkipableLineReader = @import("SkipableLineReader.zig");
 const FormatWriter = @import("FormatWriter.zig").FormatWriter;
+const FieldSelector = @import("FieldSelector.zig");
 
 var allocator: std.mem.Allocator = undefined;
 var options: Options = undefined;
@@ -90,33 +91,6 @@ const Fields = struct {
     pub fn get(self: *const Fields) !*const [][]const u8 {
         self.fields[self.fields.len - 1] = try std.fmt.allocPrint(allocator, "{d}", .{self.count});
         return &self.fields;
-    }
-};
-
-const SelectedFields = struct {
-    var selected: [][]const u8 = undefined;
-
-    fn init() !void {
-        if (options.selectionIndices) |selectionIndices| {
-            selected = try allocator.alloc([]u8, selectionIndices.len);
-        }
-    }
-
-    fn deinit() void {
-        if (options.selectionIndices) {
-            allocator.free(selected);
-        }
-    }
-
-    inline fn get(fields: *const [][]const u8) *const [][]const u8 {
-        if (options.selectionIndices) |indices| {
-            for (indices, 0..) |field, index| {
-                selected[index] = fields.*[field];
-            }
-            return &selected;
-        } else {
-            return fields;
-        }
     }
 };
 
@@ -250,14 +224,14 @@ const FieldWidths = struct {
     var lineDashes: []u8 = undefined;
     var maxSpace: usize = undefined;
 
-    fn calculate(lineReader: anytype, csvLine: *CsvLine) !void {
+    fn calculate(lineReader: anytype, csvLine: *CsvLine, fieldSelector: FieldSelector) !void {
         switch (options.outputFormat) {
             .markdown, .jira, .table => {
                 if (options.fileHeader) {
                     try resetReader(lineReader);
                 }
 
-                try collectWidths(lineReader, csvLine);
+                try collectWidths(lineReader, csvLine, fieldSelector);
                 calculateMaxSpace();
                 try initPaddingStrings();
 
@@ -272,12 +246,12 @@ const FieldWidths = struct {
         try lineReader.reset();
     }
 
-    fn collectWidths(lineReader: anytype, csvLine: *CsvLine) !void {
+    fn collectWidths(lineReader: anytype, csvLine: *CsvLine, fieldSelector: FieldSelector) !void {
         var fieldWidths: std.ArrayList(usize) = try std.ArrayList(usize).initCapacity(allocator, 16);
         while (try lineReader.readLine()) |line| {
             const fields = try csvLine.parse(line);
             if (noFilterOrfilterMatches(fields, options.filterFields)) {
-                for (SelectedFields.get(&fields).*, 0..) |field, i| {
+                for (fieldSelector.get(&fields).*, 0..) |field, i| {
                     if (i + 1 > fieldWidths.items.len) {
                         try fieldWidths.append(0);
                     }
@@ -347,10 +321,11 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
         skipableLineReader.resetLinesRead();
     }
 
-    try options.setSelectionIndices();
-    try SelectedFields.init();
+    try options.calculateSelectionIndices();
+    var fieldSelector: FieldSelector = try FieldSelector.init(options.selectionIndices, allocator);
+    defer fieldSelector.deinit();
 
-    try FieldWidths.calculate(lineReader, &csvLine);
+    try FieldWidths.calculate(lineReader, &csvLine, fieldSelector);
 
     if (options.header != null and options.outputHeader) {
         if (options.count) {
@@ -358,7 +333,7 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
             header.*[header.*.len - 1] = "Count";
             try OutputWriter.writeDirect(header, true);
         } else {
-            try OutputWriter.writeDirect(SelectedFields.get(&options.header.?), true);
+            try OutputWriter.writeDirect(fieldSelector.get(&options.header.?), true);
         }
     }
 
@@ -372,7 +347,7 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
 
         if (noFilterOrfilterMatches(fields, options.filterFields)) {
             if (options.unique) {
-                try OutputWriter.writeBuffered(SelectedFields.get(&fields), false);
+                try OutputWriter.writeBuffered(fieldSelector.get(&fields), false);
 
                 if (try UniqueAgregator.isNew(OutputWriter.getBuffer())) {
                     try OutputWriter.commitBuffer();
@@ -381,7 +356,7 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
             } else if (options.count) {
                 try CountAggregator.add(&fields);
             } else {
-                try OutputWriter.writeDirect(SelectedFields.get(&fields), false);
+                try OutputWriter.writeDirect(fieldSelector.get(&fields), false);
                 linesWritten += 1;
             }
             if (options.outputLimit != 0 and linesWritten >= options.outputLimit) {
@@ -403,8 +378,6 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
 
     if (options.outputFormat == .table) {
         try writeTableLine(&bufferedWriter.writer().any(), FieldWidths.widths.len, "└", "┴", "┘\n");
-    } else if (options.outputFormat == .html) {
-        _ = try bufferedWriter.writer().write("</table></body></html>");
     }
     try bufferedWriter.flush();
 }
