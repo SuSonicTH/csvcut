@@ -317,6 +317,7 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
     }
 
     try options.calculateSelectionIndices();
+    try csvLineReader.setSelectionIndices(options.selectionIndices);
 
     try FieldWidths.calculate(&csvLineReader);
 

@@ -2,6 +2,7 @@ const std = @import("std");
 const LineReader = @import("LineReader").LineReader;
 const CsvLine = @import("CsvLine");
 
+allocator: std.mem.Allocator,
 lineReader: *LineReader,
 csvLine: CsvLine.CsvLine,
 inputLimit: usize,
@@ -15,6 +16,7 @@ const Self = @This();
 
 pub fn init(lineReader: *LineReader, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !Self {
     return .{
+        .allocator = allocator,
         .lineReader = lineReader,
         .csvLine = try CsvLine.CsvLine.init(allocator, csvLineOptions),
         .inputLimit = inputLimit,
@@ -36,9 +38,11 @@ pub fn resetLinesRead(self: *Self) void {
     self.linesRead = 0;
 }
 
-pub fn setSelectionIndices(self: *Self, selectionIndices: []usize) !void {
-    self.selectionIndices = selectionIndices;
-    self.selected = try self.allocator.alloc([]u8, selectionIndices.len);
+pub fn setSelectionIndices(self: *Self, selectionIndices: ?[]usize) !void {
+    if (selectionIndices) |indices| {
+        self.selectionIndices = indices;
+        self.selected = try self.allocator.alloc([]u8, selectionIndices.?.len);
+    }
 }
 
 pub inline fn readLine(self: *Self) !?[][]const u8 {
