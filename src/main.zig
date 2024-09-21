@@ -201,16 +201,20 @@ const OutputWriter = struct {
                 .csv => try FormatWriter.init(options.outputFormat, .{ .csv = .{ .separator = options.output_separator, .quoute = options.output_quoute } }),
                 .lazyMarkdown => try FormatWriter.init(options.outputFormat, .{ .lazyMarkdown = .{} }),
                 .lazyJira => try FormatWriter.init(options.outputFormat, .{ .lazyJira = .{} }),
+                .html => try FormatWriter.init(options.outputFormat, .{ .html = .{} }),
                 else => unreachable,
             };
             lineBuffer = try std.ArrayList(u8).initCapacity(allocator, 1024);
+            try formatWriter.start(&writer);
             initialized = true;
         }
         outputWriter = writer;
     }
 
     fn deinit() void {
+        formatWriter.end(&outputWriter) catch unreachable;
         lineBuffer.deinit();
+        initialized = false;
     }
 
     fn writeBuffered(fields: *const [][]const u8, isHeader: bool) !void {
@@ -329,6 +333,7 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
 
     var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
     try OutputWriter.init(bufferedWriter.writer().any());
+    defer OutputWriter.deinit();
 
     var skipableLineReader: SkipableLineReader = SkipableLineReader.init(lineReader, options.inputLimit, options.skipLine);
 
@@ -519,27 +524,6 @@ inline fn writeTableLine(writer: *const std.io.AnyWriter, len: usize, left: []co
         _ = try writer.write(FieldWidths.lineDashes[0 .. FieldWidths.widths[i] * 3]);
     }
     _ = try writer.write(right);
-}
-
-fn writeOutputhtml(writer: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {
-    if (isHeader) {
-        _ = try writer.write("<html><body><table>\n");
-        _ = try writer.write("<tr>");
-        for (fields.*) |field| {
-            _ = try writer.write("<th>");
-            _ = try writer.write(field);
-            _ = try writer.write("</th>");
-        }
-        _ = try writer.write("</tr>\n");
-    } else {
-        _ = try writer.write("<tr>");
-        for (fields.*) |field| {
-            _ = try writer.write("<td>");
-            _ = try writer.write(field);
-            _ = try writer.write("</td>");
-        }
-        _ = try writer.write("</tr>\n");
-    }
 }
 
 inline fn noFilterOrfilterMatches(fields: [][]const u8, filterFields: ?std.ArrayList(Filter)) bool {
