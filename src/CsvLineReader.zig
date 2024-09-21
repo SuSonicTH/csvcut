@@ -1,7 +1,9 @@
-const LineReader = @import("LineReader").LineReader;
 const std = @import("std");
+const LineReader = @import("LineReader").LineReader;
+const CsvLine = @import("CsvLine");
 
 lineReader: *LineReader,
+csvLine: CsvLine.CsvLine,
 inputLimit: usize,
 skipLine: ?std.AutoHashMap(usize, bool),
 lineNumber: usize = 0,
@@ -9,25 +11,30 @@ linesRead: usize = 0,
 
 const Self = @This();
 
-pub fn init(lineReader: *LineReader, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool)) Self {
+pub fn init(lineReader: *LineReader, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !Self {
     return .{
         .lineReader = lineReader,
+        .csvLine = try CsvLine.CsvLine.init(allocator, csvLineOptions),
         .inputLimit = inputLimit,
         .skipLine = skipLine,
     };
 }
 
-pub fn reset(self: *Self) void {
+pub fn deinit(self: *Self) void {
+    self.csvLine.deinit();
+}
+
+pub fn reset(self: *Self) !void {
     self.lineNumber = 0;
     self.linesRead = 0;
-    self.lineReader.reset();
+    try self.lineReader.reset();
 }
 
 pub fn resetLinesRead(self: *Self) void {
     self.linesRead = 0;
 }
 
-pub inline fn readLine(self: *Self) !?[]const u8 {
+pub inline fn readLine(self: *Self) !?[][]const u8 {
     if (self.inputLimit > 0 and self.inputLimit == self.linesRead) {
         return null;
     }
@@ -40,5 +47,8 @@ pub inline fn readLine(self: *Self) !?[]const u8 {
     }
     self.lineNumber += 1;
     self.linesRead += 1;
-    return self.lineReader.*.readLine();
+    if (try self.lineReader.*.readLine()) |line| {
+        return try self.csvLine.parse(line);
+    }
+    return null;
 }

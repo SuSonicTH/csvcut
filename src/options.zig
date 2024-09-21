@@ -84,6 +84,10 @@ pub const Options = struct {
         self.header = try self.allocator.dupe([]const u8, try (try self.getCsvLine()).parse(header));
     }
 
+    pub fn setHeaderFields(self: *Options, fields: [][]const u8) !void {
+        self.header = try self.allocator.dupe([]const u8, fields);
+    }
+
     fn getCsvLine(self: *Options) !*CsvLine {
         if (self.csvLine == null) {
             self.csvLine = try CsvLine.init(self.allocator, .{ .trim = self.trim });
