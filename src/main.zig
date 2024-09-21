@@ -197,7 +197,12 @@ const OutputWriter = struct {
 
     fn init(writer: std.io.AnyWriter) !void {
         if (!initialized) {
-            formatWriter = try FormatWriter.init(options.outputFormat, .{ .csv = .{ .separator = options.output_separator, .quoute = options.output_quoute } });
+            formatWriter = switch (options.outputFormat) {
+                .csv => try FormatWriter.init(options.outputFormat, .{ .csv = .{ .separator = options.output_separator, .quoute = options.output_quoute } }),
+                .lazyMarkdown => try FormatWriter.init(options.outputFormat, .{ .lazyMarkdown = .{} }),
+                .lazyJira => try FormatWriter.init(options.outputFormat, .{ .lazyJira = .{} }),
+                else => unreachable,
+            };
             lineBuffer = try std.ArrayList(u8).initCapacity(allocator, 1024);
             initialized = true;
         }
@@ -409,39 +414,6 @@ fn listHeader(lineReader: *LineReader, csvLine: *CsvLine) !void {
     }
 }
 
-fn writeOutputCsv(writer: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {
-    _ = isHeader;
-    for (fields.*, 0..) |field, index| {
-        if (index > 0) {
-            _ = try writer.write(&options.output_separator);
-        }
-        if (options.output_quoute != null) {
-            _ = try writer.write(&options.output_quoute.?);
-        }
-        _ = try writer.write(field);
-        if (options.output_quoute != null) {
-            _ = try writer.write(&options.output_quoute.?);
-        }
-    }
-    _ = try writer.write("\n");
-}
-
-fn writeOutputLazyMarkdown(writer: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {
-    for (fields.*) |field| {
-        _ = try writer.write("| ");
-        _ = try writer.write(try escapeMarkup(field, markdownSpecial));
-        _ = try writer.write(" ");
-    }
-    _ = try writer.write("|\n");
-    if (isHeader) {
-        for (fields.*) |field| {
-            _ = field;
-            _ = try writer.write("| --- ");
-        }
-        _ = try writer.write("|\n");
-    }
-}
-
 fn writeOutputMarkdown(writer: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {
     for (fields.*, 0..) |field, i| {
         const escaped = try escapeMarkup(field, jiraSpecial);
@@ -488,24 +460,6 @@ inline fn escapeMarkup(field: []const u8, comptime specialCharacters: []const u8
         return escapeBuffer[0 .. field.len + offset];
     }
     return field;
-}
-
-fn writeOutputLazyJira(writer: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {
-    if (isHeader) {
-        for (fields.*) |field| {
-            _ = try writer.write("||");
-            _ = try writer.write(try escapeMarkup(field, jiraSpecial));
-            _ = try writer.write(" ");
-        }
-        _ = try writer.write("||\n");
-    } else {
-        for (fields.*) |field| {
-            _ = try writer.write("| ");
-            _ = try writer.write(try escapeMarkup(field, jiraSpecial));
-            _ = try writer.write(" ");
-        }
-        _ = try writer.write("|\n");
-    }
 }
 
 fn writeOutputJira(writer: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {

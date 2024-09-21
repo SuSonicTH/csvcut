@@ -1,19 +1,21 @@
 const std = @import("std");
 const OutputFormat = @import("options.zig").OutputFormat;
 const CsvWriter = @import("FormatWriter/CsvWriter.zig");
+const LazyMarkdown = @import("FormatWriter/LazyMarkdown.zig");
+const LazyJira = @import("FormatWriter/LazyJira.zig");
+
+pub const NoOption: FormatWriterOptions = .{ .csv = .{} };
 
 pub const FormatWriterOptions = union(OutputFormat) {
     csv: CsvWriter.Options,
-    lazyMarkdown: LazyMarkdownOptions,
-    lazyJira: LazyJiraOptions,
+    lazyMarkdown: LazyMarkdown.Options,
+    lazyJira: LazyJira.Options,
     markdown: MarkdownOptions,
     jira: JiraOptions,
     table: TableOptions,
     html: HtmlOptions,
 };
 
-pub const LazyMarkdownOptions = struct {};
-pub const LazyJiraOptions = struct {};
 pub const MarkdownOptions = struct {};
 pub const JiraOptions = struct {};
 pub const TableOptions = struct {};
@@ -21,8 +23,8 @@ pub const HtmlOptions = struct {};
 
 pub const FormatWriter = union(OutputFormat) {
     csv: CsvWriter,
-    lazyMarkdown: LazyMarkdownWriter,
-    lazyJira: LazyJiraWriter,
+    lazyMarkdown: LazyMarkdown,
+    lazyJira: LazyJira,
     markdown: MarkdownWriter,
     jira: JiraWriter,
     table: TableWriter,
@@ -31,8 +33,8 @@ pub const FormatWriter = union(OutputFormat) {
     pub fn init(format: OutputFormat, options: FormatWriterOptions) !FormatWriter {
         return switch (format) {
             .csv => .{ .csv = try CsvWriter.init(options.csv) },
-            .lazyMarkdown => .{ .lazyMarkdown = try LazyMarkdownWriter.init(options) },
-            .lazyJira => .{ .lazyJira = try LazyJiraWriter.init(options) },
+            .lazyMarkdown => .{ .lazyMarkdown = try LazyMarkdown.init(options.lazyMarkdown) },
+            .lazyJira => .{ .lazyJira = try LazyJira.init(options.lazyJira) },
             .markdown => .{ .markdown = try MarkdownWriter.init(options) },
             .jira => .{ .jira = try JiraWriter.init(options) },
             .table => .{ .table = try TableWriter.init(options) },
@@ -62,70 +64,6 @@ pub const FormatWriter = union(OutputFormat) {
         switch (self.*) {
             inline else => |*formatWriter| try formatWriter.end(writer),
         }
-    }
-};
-
-pub const LazyMarkdownWriter = struct {
-    options: FormatWriterOptions,
-
-    pub fn init(options: FormatWriterOptions) !LazyMarkdownWriter {
-        return .{
-            .options = options,
-        };
-    }
-
-    pub fn start(self: *LazyMarkdownWriter, writer: *const std.io.AnyWriter) !void {
-        _ = self;
-        _ = writer;
-    }
-
-    pub fn writeHeader(self: *LazyMarkdownWriter, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
-        _ = self;
-        _ = writer;
-        _ = fields;
-    }
-
-    pub fn writeData(self: *LazyMarkdownWriter, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
-        _ = self;
-        _ = writer;
-        _ = fields;
-    }
-
-    pub fn end(self: *LazyMarkdownWriter, writer: *const std.io.AnyWriter) !void {
-        _ = self;
-        _ = writer;
-    }
-};
-
-pub const LazyJiraWriter = struct {
-    options: FormatWriterOptions,
-
-    pub fn init(options: FormatWriterOptions) !LazyJiraWriter {
-        return .{
-            .options = options,
-        };
-    }
-
-    pub fn start(self: *LazyJiraWriter, writer: *const std.io.AnyWriter) !void {
-        _ = self;
-        _ = writer;
-    }
-
-    pub fn writeHeader(self: *LazyJiraWriter, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
-        _ = self;
-        _ = writer;
-        _ = fields;
-    }
-
-    pub fn writeData(self: *LazyJiraWriter, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
-        _ = self;
-        _ = writer;
-        _ = fields;
-    }
-
-    pub fn end(self: *LazyJiraWriter, writer: *const std.io.AnyWriter) !void {
-        _ = self;
-        _ = writer;
     }
 };
 
