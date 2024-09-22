@@ -7,7 +7,6 @@ const ArgumentParser = @import("arguments.zig").Parser;
 const Utf8Output = @import("Utf8Output.zig");
 const CsvLineReader = @import("CsvLineReader.zig");
 const FormatWriter = @import("FormatWriter.zig").FormatWriter;
-//const FieldSelector = @import("FieldSelector.zig");
 
 var allocator: std.mem.Allocator = undefined;
 var options: Options = undefined;
@@ -73,17 +72,9 @@ const Fields = struct {
     pub fn init(fields: *const [][]const u8) !Fields {
         var self: Fields = (try allocator.alloc(Fields, 1))[0];
         self.count = 1;
-
-        if (options.selectionIndices) |indices| {
-            self.fields = try allocator.alloc([]u8, indices.len + 1);
-            for (indices, 0..) |field, i| {
-                self.fields[i] = try allocator.dupe(u8, fields.*[field]);
-            }
-        } else {
-            self.fields = try allocator.alloc([]u8, fields.len + 1);
-            for (fields.*, 0..) |field, i| {
-                self.fields[i] = try allocator.dupe(u8, field);
-            }
+        self.fields = try allocator.alloc([]u8, fields.len + 1);
+        for (fields.*, 0..) |field, i| {
+            self.fields[i] = try allocator.dupe(u8, field);
         }
         return self;
     }
@@ -146,16 +137,9 @@ const CountAggregator = struct {
 
     fn getKey(fields: *const [][]const u8) ![]u8 {
         keyBuffer.clearRetainingCapacity();
-        if (options.selectionIndices) |indices| {
-            for (indices) |field| {
-                try keyBuffer.appendSlice(fields.*[field]);
-                try keyBuffer.append('|');
-            }
-        } else {
-            for (fields.*) |field| {
-                try keyBuffer.appendSlice(field);
-                try keyBuffer.append('|');
-            }
+        for (fields.*) |field| {
+            try keyBuffer.appendSlice(field);
+            try keyBuffer.append('|');
         }
         return keyBuffer.items;
     }
@@ -249,17 +233,15 @@ const FieldWidths = struct {
     fn collectWidths(lineReader: anytype) !void {
         var fieldWidths: std.ArrayList(usize) = try std.ArrayList(usize).initCapacity(allocator, 16);
         while (try lineReader.readLine()) |fields| {
-            if (noFilterOrfilterMatches(fields, options.filterFields)) {
-                for (fields, 0..) |field, i| {
-                    if (i + 1 > fieldWidths.items.len) {
-                        try fieldWidths.append(0);
-                    }
-                    switch (options.outputFormat) {
-                        .markdown => widths[i] = @max(fieldWidths.items[i], (try escapeMarkup(field, markdownSpecial)).len),
-                        .jira => fieldWidths.items[i] = @max(fieldWidths.items[i], (try escapeMarkup(field, jiraSpecial)).len),
-                        .table => fieldWidths.items[i] = @max(fieldWidths.items[i], field.len),
-                        else => undefined,
-                    }
+            for (fields, 0..) |field, i| {
+                if (i + 1 > fieldWidths.items.len) {
+                    try fieldWidths.append(0);
+                }
+                switch (options.outputFormat) {
+                    .markdown => widths[i] = @max(fieldWidths.items[i], (try escapeMarkup(field, markdownSpecial)).len),
+                    .jira => fieldWidths.items[i] = @max(fieldWidths.items[i], (try escapeMarkup(field, jiraSpecial)).len),
+                    .table => fieldWidths.items[i] = @max(fieldWidths.items[i], field.len),
+                    else => undefined,
                 }
             }
         }
@@ -319,6 +301,11 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
     try options.calculateSelectionIndices();
     try csvLineReader.setSelectionIndices(options.selectionIndices);
 
+    if (options.filterFields != null) {
+        try options.setFilterIndices();
+        csvLineReader.setFilterFields(options.filterFields);
+    }
+
     try FieldWidths.calculate(&csvLineReader);
 
     if (options.header != null and options.outputHeader) {
@@ -331,29 +318,23 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
         }
     }
 
-    if (options.filterFields != null) {
-        try options.setFilterIndices();
-    }
-
     var linesWritten: usize = 0;
     while (try csvLineReader.readLine()) |fields| {
-        if (noFilterOrfilterMatches(fields, options.filterFields)) {
-            if (options.unique) {
-                try OutputWriter.writeBuffered(&fields, false);
+        if (options.unique) {
+            try OutputWriter.writeBuffered(&fields, false);
 
-                if (try UniqueAgregator.isNew(OutputWriter.getBuffer())) {
-                    try OutputWriter.commitBuffer();
-                    linesWritten += 1;
-                }
-            } else if (options.count) {
-                try CountAggregator.add(&fields);
-            } else {
-                try OutputWriter.writeDirect(&fields, false);
+            if (try UniqueAgregator.isNew(OutputWriter.getBuffer())) {
+                try OutputWriter.commitBuffer();
                 linesWritten += 1;
             }
-            if (options.outputLimit != 0 and linesWritten >= options.outputLimit) {
-                break;
-            }
+        } else if (options.count) {
+            try CountAggregator.add(&fields);
+        } else {
+            try OutputWriter.writeDirect(&fields, false);
+            linesWritten += 1;
+        }
+        if (options.outputLimit != 0 and linesWritten >= options.outputLimit) {
+            break;
         }
     }
 
@@ -489,18 +470,6 @@ inline fn writeTableLine(writer: *const std.io.AnyWriter, len: usize, left: []co
         _ = try writer.write(FieldWidths.lineDashes[0 .. FieldWidths.widths[i] * 3]);
     }
     _ = try writer.write(right);
-}
-
-inline fn noFilterOrfilterMatches(fields: [][]const u8, filterFields: ?std.ArrayList(Filter)) bool {
-    if (filterFields == null) {
-        return true;
-    }
-    for (filterFields.?.items) |filter| {
-        if (!std.mem.eql(u8, fields[filter.index], filter.value)) {
-            return false;
-        }
-    }
-    return true;
 }
 
 test "escapeMarkdown returns filed if no escape is needed" {
