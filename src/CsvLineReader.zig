@@ -28,15 +28,15 @@ pub fn init(lineReader: *LineReader, inputLimit: usize, skipLine: ?std.AutoHashM
 
 pub fn deinit(self: *Self) void {
     self.csvLine.deinit();
+    if (self.selectionIndices != null) {
+        self.allocator.free(self.selected);
+    }
 }
 
 pub fn reset(self: *Self) !void {
     self.lineNumber = 0;
     self.linesRead = 0;
     try self.lineReader.reset();
-    if (self.selectionIndices != null) {
-        self.allocator.free(self.selected);
-    }
 }
 
 pub fn resetLinesRead(self: *Self) void {
@@ -51,7 +51,6 @@ pub fn setSelectionIndices(self: *Self, selectionIndices: ?[]usize) !void {
 }
 
 pub fn setFilterFields(self: *Self, filterFields: ?std.ArrayList(Filter)) void {
-    //_ = std.io.getStdErr().writer().print("setFilterFields\n", .{}) catch unreachable;
     self.filterFields = filterFields;
 }
 

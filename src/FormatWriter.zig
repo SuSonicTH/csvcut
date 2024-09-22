@@ -4,8 +4,7 @@ const CsvWriter = @import("FormatWriter/CsvWriter.zig");
 const LazyMarkdown = @import("FormatWriter/LazyMarkdown.zig");
 const LazyJira = @import("FormatWriter/LazyJira.zig");
 const Html = @import("FormatWriter/Html.zig");
-
-//pub const NoOption: FormatWriterOptions = .{ .csv = .{} };
+const Table = @import("FormatWriter/Table.zig");
 
 pub const FormatWriterOptions = union(OutputFormat) {
     csv: CsvWriter.Options,
@@ -13,13 +12,12 @@ pub const FormatWriterOptions = union(OutputFormat) {
     lazyJira: LazyJira.Options,
     markdown: MarkdownOptions,
     jira: JiraOptions,
-    table: TableOptions,
+    table: Table.Options,
     html: Html.Options,
 };
 
 pub const MarkdownOptions = struct {};
 pub const JiraOptions = struct {};
-pub const TableOptions = struct {};
 
 pub const FormatWriter = union(OutputFormat) {
     csv: CsvWriter,
@@ -27,7 +25,7 @@ pub const FormatWriter = union(OutputFormat) {
     lazyJira: LazyJira,
     markdown: MarkdownWriter,
     jira: JiraWriter,
-    table: TableWriter,
+    table: Table,
     html: Html,
 
     pub fn init(format: OutputFormat, options: FormatWriterOptions) !FormatWriter {
@@ -37,7 +35,7 @@ pub const FormatWriter = union(OutputFormat) {
             .lazyJira => .{ .lazyJira = try LazyJira.init(options.lazyJira) },
             .markdown => .{ .markdown = try MarkdownWriter.init(options) },
             .jira => .{ .jira = try JiraWriter.init(options) },
-            .table => .{ .table = try TableWriter.init(options) },
+            .table => .{ .table = try Table.init(options.table) },
             .html => .{ .html = try Html.init(options.html) },
         };
     }
@@ -126,38 +124,6 @@ pub const JiraWriter = struct {
     }
 
     pub fn end(self: *JiraWriter, writer: *const std.io.AnyWriter) !void {
-        _ = self;
-        _ = writer;
-    }
-};
-
-pub const TableWriter = struct {
-    options: FormatWriterOptions,
-
-    pub fn init(options: FormatWriterOptions) !TableWriter {
-        return .{
-            .options = options,
-        };
-    }
-
-    pub fn start(self: *TableWriter, writer: *const std.io.AnyWriter) !void {
-        _ = self;
-        _ = writer;
-    }
-
-    pub fn writeHeader(self: *TableWriter, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
-        _ = self;
-        _ = writer;
-        _ = fields;
-    }
-
-    pub fn writeData(self: *TableWriter, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
-        _ = self;
-        _ = writer;
-        _ = fields;
-    }
-
-    pub fn end(self: *TableWriter, writer: *const std.io.AnyWriter) !void {
         _ = self;
         _ = writer;
     }

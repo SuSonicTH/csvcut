@@ -30,3 +30,17 @@ inline fn escape(field: []const u8, comptime specialCharacters: []const u8) ![]c
     }
     return field;
 }
+
+test "escapeMarkdown returns filed if no escape is needed" {
+    const unescaped: []const u8 = "unescaped";
+    const res = try jira(unescaped);
+    try std.testing.expectEqualStrings(unescaped, res);
+    try std.testing.expectEqual(unescaped.ptr, res.ptr);
+}
+
+test "escapeMarkdown escapes special characters with backslash" {
+    const unescaped: []const u8 = "unescaped* -test [1-3] #Test end";
+    const res = try markdown(unescaped);
+    try std.testing.expectEqualStrings("unescaped\\* \\-test \\[1\\-3\\] \\#Test end", res);
+    try std.testing.expectEqual(&escapeBuffer, res.ptr);
+}

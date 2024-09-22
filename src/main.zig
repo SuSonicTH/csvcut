@@ -7,6 +7,7 @@ const ArgumentParser = @import("arguments.zig").Parser;
 const Utf8Output = @import("Utf8Output.zig");
 const CsvLineReader = @import("CsvLineReader.zig");
 const FormatWriter = @import("FormatWriter.zig").FormatWriter;
+const FieldWidths = @import("FieldWidths.zig");
 
 var allocator: std.mem.Allocator = undefined;
 var options: Options = undefined;
@@ -153,13 +154,14 @@ const OutputWriter = struct {
     var outputWriter: std.io.AnyWriter = undefined;
     var initialized = false;
 
-    fn init(writer: std.io.AnyWriter) !void {
+    fn init(writer: std.io.AnyWriter, fieldWidths: FieldWidths) !void {
         if (!initialized) {
             formatWriter = switch (options.outputFormat) {
                 .csv => try FormatWriter.init(options.outputFormat, .{ .csv = .{ .separator = options.output_separator, .quoute = options.output_quoute } }),
                 .lazyMarkdown => try FormatWriter.init(options.outputFormat, .{ .lazyMarkdown = .{} }),
                 .lazyJira => try FormatWriter.init(options.outputFormat, .{ .lazyJira = .{} }),
                 .html => try FormatWriter.init(options.outputFormat, .{ .html = .{} }),
+                .table => try FormatWriter.init(.table, .{ .table = .{ .allocator = allocator, .fieldWidths = fieldWidths } }),
                 else => unreachable,
             };
             lineBuffer = try std.ArrayList(u8).initCapacity(allocator, 1024);
@@ -169,8 +171,11 @@ const OutputWriter = struct {
         outputWriter = writer;
     }
 
+    fn end() !void {
+        try formatWriter.end(&outputWriter);
+    }
+
     fn deinit() void {
-        formatWriter.end(&outputWriter) catch unreachable;
         lineBuffer.deinit();
         initialized = false;
     }
@@ -201,92 +206,12 @@ const OutputWriter = struct {
     }
 };
 
-const FieldWidths = struct {
-    var widths: []usize = undefined;
-    var spaces: []u8 = undefined;
-    var dashes: []u8 = undefined;
-    var lineDashes: []u8 = undefined;
-    var maxSpace: usize = undefined;
-
-    fn calculate(csvLineReader: *CsvLineReader) !void {
-        switch (options.outputFormat) {
-            .markdown, .jira, .table => {
-                if (options.fileHeader) {
-                    try csvLineReader.reset();
-                }
-
-                try collectWidths(csvLineReader);
-                calculateMaxSpace();
-                try initPaddingStrings();
-
-                try csvLineReader.reset();
-                try skipFileHeader(csvLineReader);
-            },
-            else => {},
-        }
-    }
-
-    fn resetReader(lineReader: anytype) !void {
-        try lineReader.reset();
-    }
-
-    fn collectWidths(lineReader: anytype) !void {
-        var fieldWidths: std.ArrayList(usize) = try std.ArrayList(usize).initCapacity(allocator, 16);
-        while (try lineReader.readLine()) |fields| {
-            for (fields, 0..) |field, i| {
-                if (i + 1 > fieldWidths.items.len) {
-                    try fieldWidths.append(0);
-                }
-                switch (options.outputFormat) {
-                    .markdown => widths[i] = @max(fieldWidths.items[i], (try escapeMarkup(field, markdownSpecial)).len),
-                    .jira => fieldWidths.items[i] = @max(fieldWidths.items[i], (try escapeMarkup(field, jiraSpecial)).len),
-                    .table => fieldWidths.items[i] = @max(fieldWidths.items[i], field.len),
-                    else => undefined,
-                }
-            }
-        }
-        widths = try fieldWidths.toOwnedSlice();
-    }
-
-    fn calculateMaxSpace() void {
-        maxSpace = 0;
-        for (widths) |width| {
-            maxSpace = @max(maxSpace, width);
-        }
-    }
-
-    fn initPaddingStrings() !void {
-        spaces = try allocator.alloc(u8, maxSpace + 1); //todo: free
-        @memset(spaces, ' ');
-
-        dashes = try allocator.alloc(u8, maxSpace); //todo: free
-        @memset(dashes, '-');
-
-        lineDashes = try allocator.alloc(u8, maxSpace * 3); //todo: free
-        for (0..maxSpace) |i| {
-            std.mem.copyForwards(u8, lineDashes[(i * 3)..], "─");
-        }
-    }
-
-    fn skipFileHeader(csvLineREader: *CsvLineReader) !void {
-        if (options.fileHeader) {
-            if (try csvLineREader.readLine()) |line| {
-                _ = line;
-            }
-        }
-    }
-};
-
 fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
     var csvLineReader: CsvLineReader = try CsvLineReader.init(lineReader, options.inputLimit, options.skipLine, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null }, allocator);
     if (options.listHeader) {
         try listHeader(&csvLineReader);
         return;
     }
-
-    var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
-    try OutputWriter.init(bufferedWriter.writer().any());
-    defer OutputWriter.deinit();
 
     UniqueAgregator.init();
     try CountAggregator.init();
@@ -306,7 +231,12 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
         csvLineReader.setFilterFields(options.filterFields);
     }
 
-    try FieldWidths.calculate(&csvLineReader);
+    var fieldWiths = try FieldWidths.init(options.outputFormat, options.fileHeader, &csvLineReader, allocator);
+    defer fieldWiths.deinit();
+
+    var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
+    try OutputWriter.init(bufferedWriter.writer().any(), fieldWiths);
+    defer OutputWriter.deinit();
 
     if (options.header != null and options.outputHeader) {
         if (options.count) {
@@ -349,9 +279,7 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
         }
     }
 
-    if (options.outputFormat == .table) {
-        try writeTableLine(&bufferedWriter.writer().any(), FieldWidths.widths.len, "└", "┴", "┘\n");
-    }
+    try OutputWriter.end();
     try bufferedWriter.flush();
 }
 
@@ -435,41 +363,6 @@ fn writeOutputJira(writer: *const std.io.AnyWriter, fields: *const [][]const u8,
         }
         _ = try writer.write("|\n");
     }
-}
-
-fn writeOutputTable(writer: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {
-    if (isHeader) {
-        try writeTableLine(writer, fields.len, "┌", "┬", "┐\n");
-        for (fields.*, 0..) |field, i| {
-            const len = FieldWidths.widths[i] - field.len;
-            _ = try writer.write("│");
-            _ = try writer.write(field);
-            _ = try writer.write(FieldWidths.spaces[0..len]);
-        }
-        _ = try writer.write("│\n");
-        try writeTableLine(writer, fields.len, "├", "┼", "┤\n");
-    } else {
-        //try writeTableLine(writer, fields.len);
-        for (fields.*, 0..) |field, i| {
-            const len = FieldWidths.widths[i] - field.len;
-            _ = try writer.write("│");
-            _ = try writer.write(field);
-            _ = try writer.write(FieldWidths.spaces[0..len]);
-        }
-        _ = try writer.write("│\n");
-    }
-}
-
-inline fn writeTableLine(writer: *const std.io.AnyWriter, len: usize, left: []const u8, middle: []const u8, right: []const u8) !void {
-    for (0..len) |i| {
-        if (i == 0) {
-            _ = try writer.write(left);
-        } else {
-            _ = try writer.write(middle);
-        }
-        _ = try writer.write(FieldWidths.lineDashes[0 .. FieldWidths.widths[i] * 3]);
-    }
-    _ = try writer.write(right);
 }
 
 test "escapeMarkdown returns filed if no escape is needed" {
