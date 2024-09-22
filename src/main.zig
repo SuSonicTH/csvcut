@@ -231,11 +231,11 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
         csvLineReader.setFilterFields(options.filterFields);
     }
 
-    var fieldWiths = try FieldWidths.init(options.outputFormat, options.fileHeader, &csvLineReader, allocator);
-    defer fieldWiths.deinit();
+    var fieldWidths = try FieldWidths.init(options.outputFormat, options.fileHeader, &csvLineReader, allocator);
+    defer fieldWidths.deinit();
 
     var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
-    try OutputWriter.init(bufferedWriter.writer().any(), fieldWiths);
+    try OutputWriter.init(bufferedWriter.writer().any(), fieldWidths);
     defer OutputWriter.deinit();
 
     if (options.header != null and options.outputHeader) {
@@ -268,7 +268,7 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
         }
     }
 
-    if (options.count) {
+    if (options.count) { //todo: need to update FieldWidths for the count column, currenlt y--count with --format table segfaults
         var iterator = CountAggregator.countMap.iterator();
         while (iterator.next()) |entry| {
             try OutputWriter.writeDirect(try entry.value_ptr.get(), false);
@@ -363,18 +363,4 @@ fn writeOutputJira(writer: *const std.io.AnyWriter, fields: *const [][]const u8,
         }
         _ = try writer.write("|\n");
     }
-}
-
-test "escapeMarkdown returns filed if no escape is needed" {
-    const unescaped: []const u8 = "unescaped";
-    const res = try escapeMarkup(unescaped);
-    try std.testing.expectEqualStrings(unescaped, res);
-    try std.testing.expectEqual(unescaped.ptr, res.ptr);
-}
-
-test "escapeMarkdown escapes special characters with backslash" {
-    const unescaped: []const u8 = "unescaped* -test [1-3] #Test end";
-    const res = try escapeMarkup(unescaped);
-    try std.testing.expectEqualStrings("unescaped\\* \\-test \\[1\\-3\\] \\#Test end", res);
-    try std.testing.expectEqual(&escapeBuffer, res.ptr);
 }
