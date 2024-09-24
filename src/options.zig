@@ -15,6 +15,8 @@ pub const OutputFormat = enum {
     jira,
     table,
     html,
+    json,
+    jsonArray,
 };
 
 const SelectionType = enum {
@@ -84,6 +86,10 @@ pub const Options = struct {
         self.header = try self.allocator.dupe([]const u8, try (try self.getCsvLine()).parse(header));
     }
 
+    pub fn setHeaderFields(self: *Options, fields: [][]const u8) !void {
+        self.header = try self.allocator.dupe([]const u8, fields);
+    }
+
     fn getCsvLine(self: *Options) !*CsvLine {
         if (self.csvLine == null) {
             self.csvLine = try CsvLine.init(self.allocator, .{ .trim = self.trim });
@@ -100,7 +106,7 @@ pub const Options = struct {
         }
     }
 
-    pub fn setSelectionIndices(self: *Options) !void {
+    pub fn calculateSelectionIndices(self: *Options) !void {
         if (self.selectedFields == null or self.selectionIndices != null) return;
         self.selectionIndices = try self.allocator.alloc(usize, self.selectedFields.?.items.len);
 
