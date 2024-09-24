@@ -162,7 +162,8 @@ const OutputWriter = struct {
                 .lazyJira => try FormatWriter.init(options.outputFormat, .{ .lazyJira = .{} }),
                 .html => try FormatWriter.init(options.outputFormat, .{ .html = .{} }),
                 .table => try FormatWriter.init(.table, .{ .table = .{ .allocator = allocator, .fieldWidths = fieldWidths } }),
-                else => unreachable,
+                .markdown => try FormatWriter.init(.markdown, .{ .markdown = .{ .allocator = allocator, .fieldWidths = fieldWidths } }),
+                .jira => try FormatWriter.init(.jira, .{ .jira = .{ .allocator = allocator, .fieldWidths = fieldWidths } }),
             };
             lineBuffer = try std.ArrayList(u8).initCapacity(allocator, 1024);
             try formatWriter.start(&writer);
@@ -290,77 +291,5 @@ fn listHeader(csvLineReader: *CsvLineReader) !void {
             _ = try out.write(field);
             _ = try out.write("\n");
         }
-    }
-}
-
-fn writeOutputMarkdown(writer: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {
-    for (fields.*, 0..) |field, i| {
-        const escaped = try escapeMarkup(field, jiraSpecial);
-        const len = FieldWidths.widths[i] - escaped.len + 1;
-
-        _ = try writer.write("| ");
-        _ = try writer.write(escaped);
-        _ = try writer.write(FieldWidths.spaces[0..len]);
-    }
-    _ = try writer.write("|\n");
-    if (isHeader) {
-        for (fields.*, 0..) |field, i| {
-            _ = field;
-            const len = if (FieldWidths.widths[i] < 3) 3 else FieldWidths.widths[i];
-
-            _ = try writer.write("| ");
-            _ = try writer.write(FieldWidths.dashes[0..len]);
-            _ = try writer.write(" ");
-        }
-        _ = try writer.write("|\n");
-    }
-}
-
-var escapeBuffer: [1024]u8 = undefined;
-const markdownSpecial: []const u8 = "\\`*_{}[]<>()#+-.!|";
-const jiraSpecial: []const u8 = "*_-{|^+?#";
-
-inline fn escapeMarkup(field: []const u8, comptime specialCharacters: []const u8) ![]const u8 {
-    var offset: u16 = 0;
-    for (field, 0..) |c, i| {
-        if (std.mem.indexOfScalar(u8, specialCharacters, c)) |pos| {
-            _ = pos;
-            if (offset == 0) {
-                std.mem.copyForwards(u8, &escapeBuffer, field[0..i]);
-            }
-            escapeBuffer[i + offset] = '\\';
-            offset += 1;
-            escapeBuffer[i + offset] = c;
-        } else if (offset > 0) {
-            escapeBuffer[i + offset] = c;
-        }
-    }
-    if (offset > 0) {
-        return escapeBuffer[0 .. field.len + offset];
-    }
-    return field;
-}
-
-fn writeOutputJira(writer: *const std.io.AnyWriter, fields: *const [][]const u8, isHeader: bool) !void {
-    if (isHeader) {
-        for (fields.*, 0..) |field, i| {
-            const escaped = try escapeMarkup(field, jiraSpecial);
-            const len = FieldWidths.widths[i] - escaped.len + 1;
-
-            _ = try writer.write("||");
-            _ = try writer.write(escaped);
-            _ = try writer.write(FieldWidths.spaces[0..len]);
-        }
-        _ = try writer.write("||\n");
-    } else {
-        for (fields.*, 0..) |field, i| {
-            const escaped = try escapeMarkup(field, jiraSpecial);
-            const len = FieldWidths.widths[i] - escaped.len + 1;
-
-            _ = try writer.write("| ");
-            _ = try writer.write(try escapeMarkup(field, jiraSpecial));
-            _ = try writer.write(FieldWidths.spaces[0..len]);
-        }
-        _ = try writer.write("|\n");
     }
 }
