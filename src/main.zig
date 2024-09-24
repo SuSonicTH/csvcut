@@ -156,15 +156,7 @@ const OutputWriter = struct {
 
     fn init(writer: std.io.AnyWriter, fieldWidths: FieldWidths) !void {
         if (!initialized) {
-            formatWriter = switch (options.outputFormat) {
-                .csv => try FormatWriter.init(options.outputFormat, .{ .csv = .{ .separator = options.output_separator, .quoute = options.output_quoute } }),
-                .lazyMarkdown => try FormatWriter.init(options.outputFormat, .{ .lazyMarkdown = .{} }),
-                .lazyJira => try FormatWriter.init(options.outputFormat, .{ .lazyJira = .{} }),
-                .html => try FormatWriter.init(options.outputFormat, .{ .html = .{} }),
-                .table => try FormatWriter.init(.table, .{ .table = .{ .allocator = allocator, .fieldWidths = fieldWidths } }),
-                .markdown => try FormatWriter.init(.markdown, .{ .markdown = .{ .allocator = allocator, .fieldWidths = fieldWidths } }),
-                .jira => try FormatWriter.init(.jira, .{ .jira = .{ .allocator = allocator, .fieldWidths = fieldWidths } }),
-            };
+            formatWriter = try FormatWriter.init(options, allocator, fieldWidths);
             lineBuffer = try std.ArrayList(u8).initCapacity(allocator, 1024);
             try formatWriter.start(&writer);
             initialized = true;
