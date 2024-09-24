@@ -15,6 +15,8 @@ pub const OutputFormat = enum {
     jira,
     table,
     html,
+    json,
+    jsonArray,
 };
 
 const SelectionType = enum {

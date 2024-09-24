@@ -10,6 +10,8 @@ const Html = @import("FormatWriter/Html.zig");
 const Table = @import("FormatWriter/Table.zig");
 const Markdown = @import("FormatWriter/Markdown.zig");
 const Jira = @import("FormatWriter/Jira.zig");
+const Json = @import("FormatWriter/Json.zig");
+const JsonArray = @import("FormatWriter/JsonArray.zig");
 
 pub const FormatWriter = union(OutputFormat) {
     csv: CsvWriter,
@@ -19,16 +21,20 @@ pub const FormatWriter = union(OutputFormat) {
     jira: Jira,
     table: Table,
     html: Html,
+    json: Json,
+    jsonArray: JsonArray,
 
     pub fn init(options: Options, allocator: std.mem.Allocator, fieldWidths: FieldWidths) !FormatWriter {
         return switch (options.outputFormat) {
             .csv => .{ .csv = try CsvWriter.init(.{ .separator = options.output_separator, .quoute = options.output_quoute }) },
-            .lazyMarkdown => .{ .lazyMarkdown = try LazyMarkdown.init(.{}) },
-            .lazyJira => .{ .lazyJira = try LazyJira.init(.{}) },
-            .markdown => .{ .markdown = try Markdown.init(.{ .allocator = allocator, .fieldWidths = fieldWidths }) },
-            .jira => .{ .jira = try Jira.init(.{ .allocator = allocator, .fieldWidths = fieldWidths }) },
-            .table => .{ .table = try Table.init(.{ .allocator = allocator, .fieldWidths = fieldWidths }) },
+            .lazyMarkdown => .{ .lazyMarkdown = try LazyMarkdown.init() },
+            .lazyJira => .{ .lazyJira = try LazyJira.init() },
+            .markdown => .{ .markdown = try Markdown.init(allocator, fieldWidths) },
+            .jira => .{ .jira = try Jira.init(allocator, fieldWidths) },
+            .table => .{ .table = try Table.init(allocator, fieldWidths) },
             .html => .{ .html = try Html.init(.{}) },
+            .json => .{ .json = try Json.init(allocator) },
+            .jsonArray => .{ .jsonArray = try JsonArray.init() },
         };
     }
 

@@ -2,14 +2,8 @@ const std = @import("std");
 const escape = @import("escape.zig");
 const Self = @This();
 
-pub const Options = struct {};
-
-options: Options,
-
-pub fn init(options: Options) !Self {
-    return .{
-        .options = options,
-    };
+pub fn init() !Self {
+    return .{};
 }
 
 pub fn start(self: *Self, writer: *const std.io.AnyWriter) !void {

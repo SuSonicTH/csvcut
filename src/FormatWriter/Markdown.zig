@@ -4,29 +4,29 @@ const escape = @import("escape.zig");
 
 const Self = @This();
 
-pub const Options = struct {
-    fieldWidths: FieldWidths,
-    allocator: std.mem.Allocator,
-};
-
-options: Options,
+allocator: std.mem.Allocator,
+fieldWidths: FieldWidths,
 spaces: []u8 = undefined,
 dashes: []u8 = undefined,
 
-pub fn init(options: Options) !Self {
+pub fn init(
+    allocator: std.mem.Allocator,
+    fieldWidths: FieldWidths,
+) !Self {
     return .{
-        .options = options,
+        .allocator = allocator,
+        .fieldWidths = fieldWidths,
     };
 }
 
 pub fn start(self: *Self, writer: *const std.io.AnyWriter) !void {
     _ = writer;
-    const maxSpace = self.options.fieldWidths.maxSpace;
+    const maxSpace = self.fieldWidths.maxSpace;
 
-    self.spaces = try self.options.allocator.alloc(u8, maxSpace + 1);
+    self.spaces = try self.allocator.alloc(u8, maxSpace + 1);
     @memset(self.spaces, ' ');
 
-    self.dashes = try self.options.allocator.alloc(u8, maxSpace);
+    self.dashes = try self.allocator.alloc(u8, maxSpace);
     @memset(self.dashes, '-');
 }
 
@@ -34,7 +34,7 @@ pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const 
     try self.writeData(writer, fields);
     for (fields.*, 0..) |field, i| {
         _ = field;
-        const width = self.options.fieldWidths.widths[i];
+        const width = self.fieldWidths.widths[i];
         const len = if (width < 3) 3 else width;
 
         _ = try writer.write("| ");
@@ -47,7 +47,7 @@ pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const 
 pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
     for (fields.*, 0..) |field, i| {
         const escaped = try escape.markdown(field);
-        const len = self.options.fieldWidths.widths[i] - escaped.len + 1;
+        const len = self.fieldWidths.widths[i] - escaped.len + 1;
 
         _ = try writer.write("| ");
         _ = try writer.write(escaped);
@@ -58,6 +58,6 @@ pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const []
 
 pub fn end(self: *Self, writer: *const std.io.AnyWriter) !void {
     _ = writer;
-    self.options.allocator.free(self.spaces);
-    self.options.allocator.free(self.dashes);
+    self.allocator.free(self.spaces);
+    self.allocator.free(self.dashes);
 }
