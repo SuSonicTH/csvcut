@@ -98,7 +98,7 @@ inline fn noFilterOrfilterMatches(self: *Self, fields: [][]const u8) bool {
     return true;
 }
 
-inline fn getSelectedFields(self: *Self, fields: [][]const u8) !?[][]const u8 {
+pub inline fn getSelectedFields(self: *Self, fields: [][]const u8) !?[][]const u8 {
     if (self.selectionIndices) |indices| {
         for (indices, 0..) |field, index| {
             self.selected[index] = fields[field];

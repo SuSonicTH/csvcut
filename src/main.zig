@@ -233,11 +233,12 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
 
     if (options.header != null and options.outputHeader) {
         if (options.count) {
-            const header = try (try Fields.init(&options.header.?)).get();
+            const selectedHeader = &(try csvLineReader.getSelectedFields(options.header.?)).?;
+            const header = try (try Fields.init(selectedHeader)).get();
             header.*[header.*.len - 1] = "Count";
             try OutputWriter.writeDirect(header, true);
         } else {
-            try OutputWriter.writeDirect(&options.header.?, true);
+            try OutputWriter.writeDirect(&(try csvLineReader.getSelectedFields(options.header.?)).?, true);
         }
     }
 
