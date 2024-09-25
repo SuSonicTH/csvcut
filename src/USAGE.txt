@@ -35,6 +35,8 @@ Options:
      --format jira              evenly spaced jira/confluence table format (slower)
      --format table             evenly spaced console table format (slower)
      --format html              plain html with a table
+     --format json              json with array of objects
+     --format jsonArray         json with an array of arrays
 
   output:
      -S, --outputSeparator sep  use sep as input field separator
