@@ -8,7 +8,6 @@
 * even more output formats
   * table output with extra lines between rows (and double lines for header/last line)
   * table output with alternating BG color every 2nd row
-  * json
   * xml
   * excel
 
@@ -23,4 +22,3 @@
 ### speed
 
 ### cleanup
-* move outputWriter to separate file?
