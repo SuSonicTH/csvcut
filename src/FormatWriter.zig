@@ -6,10 +6,11 @@ const FieldWidths = @import("FieldWidths.zig");
 const CsvWriter = @import("FormatWriter/CsvWriter.zig");
 const LazyMarkdown = @import("FormatWriter/LazyMarkdown.zig");
 const LazyJira = @import("FormatWriter/LazyJira.zig");
-const Html = @import("FormatWriter/Html.zig");
-const Table = @import("FormatWriter/Table.zig");
 const Markdown = @import("FormatWriter/Markdown.zig");
 const Jira = @import("FormatWriter/Jira.zig");
+const Table = @import("FormatWriter/Table.zig");
+const Html = @import("FormatWriter/Html.zig");
+const HtmlHandson = @import("FormatWriter/HtmlHandson.zig");
 const Json = @import("FormatWriter/Json.zig");
 const JsonArray = @import("FormatWriter/JsonArray.zig");
 
@@ -21,6 +22,7 @@ pub const FormatWriter = union(OutputFormat) {
     jira: Jira,
     table: Table,
     html: Html,
+    htmlHandson: HtmlHandson,
     json: Json,
     jsonArray: JsonArray,
 
@@ -33,6 +35,7 @@ pub const FormatWriter = union(OutputFormat) {
             .jira => .{ .jira = try Jira.init(allocator, fieldWidths) },
             .table => .{ .table = try Table.init(allocator, fieldWidths) },
             .html => .{ .html = try Html.init(.{}) },
+            .htmlHandson => .{ .htmlHandson = try HtmlHandson.init() },
             .json => .{ .json = try Json.init(allocator) },
             .jsonArray => .{ .jsonArray = try JsonArray.init() },
         };

@@ -1,0 +1,20 @@
+<html>
+
+<head>
+    <script type="text/javascript"
+        src="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css" />
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const handson = new Handsontable(document.querySelector('#grid'), {
+                data: data,
+                rowHeaders: true,
+                filters: true,
+                customBorders: true,
+                dropdownMenu: true,
+                autoWrapRow: true,
+                autoWrapCol: true,
+                filters: true,
+                contextMenu: true,
+                licenseKey: 'non-commercial-and-evaluation',
+                colHeaders: 

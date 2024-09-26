@@ -35,6 +35,7 @@ Options:
      --format jira              evenly spaced jira/confluence table format (slower)
      --format table             evenly spaced console table format (slower)
      --format html              plain html with a table
+     --format htmlHandson       html with HandsonTable (sorting, filtering,...)
      --format json              json with array of objects
      --format jsonArray         json with an array of arrays
 

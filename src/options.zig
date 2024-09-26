@@ -15,6 +15,7 @@ pub const OutputFormat = enum {
     jira,
     table,
     html,
+    htmlHandson,
     json,
     jsonArray,
 };
