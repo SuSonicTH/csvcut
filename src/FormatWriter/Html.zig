@@ -4,6 +4,7 @@ const Self = @This();
 pub const Options = struct {};
 
 options: Options,
+lineCount: usize = 0,
 
 pub fn init(options: Options) !Self {
     return .{
@@ -33,7 +34,6 @@ pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const 
 }
 
 pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
-    _ = self;
     _ = try writer.write("<tr>");
     for (fields.*) |field| {
         _ = try writer.write("<td>");
@@ -41,6 +41,11 @@ pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const []
         _ = try writer.write("</td>");
     }
     _ = try writer.write("</tr>\n");
+
+    self.lineCount += 1;
+    if (self.lineCount == 50000) {
+        _ = try std.io.getStdErr().write("Warning: using more then 50000 lines in html output causes performance issues and possible crashes in the browser\n");
+    }
 }
 
 pub fn end(self: *Self, writer: *const std.io.AnyWriter) !void {

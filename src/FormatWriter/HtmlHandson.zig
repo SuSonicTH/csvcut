@@ -2,14 +2,15 @@ const std = @import("std");
 const Self = @This();
 
 firstLine: bool = true,
+lineCount: usize = 0,
 
 pub fn init() !Self {
     return .{};
 }
 
 pub fn start(self: *Self, writer: *const std.io.AnyWriter) !void {
-    _ = self;
     _ = try writer.write(@embedFile("HtmlHandsonHeader.html"));
+    self.lineCount = 0;
 }
 
 pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
@@ -46,6 +47,11 @@ pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const []
         _ = try writer.write("\"");
     }
     _ = try writer.write("]");
+
+    self.lineCount += 1;
+    if (self.lineCount == 10000) {
+        _ = try std.io.getStdErr().write("Warning: using more then 10000 lines in htmlHandson output causes performance issues and possible crashes in the browser\n");
+    }
 }
 
 pub fn end(self: *Self, writer: *const std.io.AnyWriter) !void {
