@@ -13,6 +13,7 @@
 
 ## fixes
 * figure out why stdin processing is much slower then file processing
+* --count causes segfault fith aligned outputs
 
 ## improvements
 

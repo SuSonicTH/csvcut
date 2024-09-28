@@ -38,6 +38,7 @@ const Argument = enum {
     @"--count",
     @"--inputLimit",
     @"--outputLimit",
+    @"--lengths",
 };
 
 const Separator = enum {
@@ -176,6 +177,10 @@ pub const Parser = struct {
                     },
                     .@"--outputLimit" => {
                         try options.setOutputLimit(try argumentValue(args, index, arg));
+                        skipNext();
+                    },
+                    .@"--lengths" => {
+                        try options.setLenghts(try argumentValue(args, index, arg));
                         skipNext();
                     },
                 }

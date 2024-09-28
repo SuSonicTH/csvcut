@@ -59,6 +59,7 @@ pub const Options = struct {
     count: bool = false,
     inputLimit: usize = 0,
     outputLimit: usize = 0,
+    lengths: ?std.ArrayList(usize) = null,
 
     pub fn init(allocator: std.mem.Allocator) !Options {
         return .{
@@ -174,5 +175,12 @@ pub const Options = struct {
 
     pub fn setOutputLimit(self: *Options, value: []const u8) !void {
         self.outputLimit = try std.fmt.parseInt(usize, value, 10);
+    }
+
+    pub fn setLenghts(self: *Options, value: []const u8) !void {
+        self.lengths = try std.ArrayList(usize).initCapacity(self.allocator, 16);
+        for (try (try self.getCsvLine()).parse(value)) |len| {
+            try self.lengths.?.append(try std.fmt.parseInt(usize, len, 10));
+        }
     }
 };

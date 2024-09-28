@@ -1,7 +1,7 @@
 const std = @import("std");
 const CsvLine = @import("CsvLine").CsvLine;
 const OutputFormat = @import("options.zig").OutputFormat;
-const CsvLineReader = @import("CsvLineReader.zig");
+const FieldReader = @import("FieldReader.zig");
 const escape = @import("FormatWriter/escape.zig");
 
 const Self = @This();
@@ -10,15 +10,15 @@ allocator: ?std.mem.Allocator = null,
 widths: []usize = undefined,
 maxSpace: usize = undefined,
 
-pub fn init(outputFormat: OutputFormat, hasHeader: bool, lineReader: *CsvLineReader, allocator: std.mem.Allocator) !Self {
+pub fn init(outputFormat: OutputFormat, hasHeader: bool, fieldReader: *FieldReader, allocator: std.mem.Allocator) !Self {
     switch (outputFormat) {
         .markdown, .jira, .table => {
             if (hasHeader) {
-                try lineReader.reset();
+                try fieldReader.reset();
             }
 
-            const widths = try collectWidths(lineReader, allocator, outputFormat);
-            try resetReader(lineReader, hasHeader);
+            const widths = try collectWidths(fieldReader, allocator, outputFormat);
+            try resetReader(fieldReader, hasHeader);
 
             return .{
                 .allocator = allocator,
@@ -36,14 +36,14 @@ pub fn deinit(self: *Self) void {
     }
 }
 
-fn collectWidths(lineReader: *CsvLineReader, allocator: std.mem.Allocator, outputFormat: OutputFormat) ![]usize {
+fn collectWidths(fieldReader: *FieldReader, allocator: std.mem.Allocator, outputFormat: OutputFormat) ![]usize {
     var fieldWidths: []usize = undefined;
-    if (try lineReader.readLine()) |fields| {
+    if (try fieldReader.readLine()) |fields| {
         fieldWidths = try allocator.alloc(usize, fields.len);
         @memset(fieldWidths, 0);
         updateFieldWidths(outputFormat, fields, fieldWidths);
     }
-    while (try lineReader.readLine()) |fields| {
+    while (try fieldReader.readLine()) |fields| {
         updateFieldWidths(outputFormat, fields, fieldWidths);
     }
     return fieldWidths;
@@ -60,10 +60,10 @@ inline fn updateFieldWidths(outputFormat: OutputFormat, fields: [][]const u8, fi
     }
 }
 
-inline fn resetReader(lineReader: *CsvLineReader, hasHeader: bool) !void {
-    try lineReader.reset();
+inline fn resetReader(fieldReader: *FieldReader, hasHeader: bool) !void {
+    try fieldReader.reset();
     if (hasHeader) {
-        if (try lineReader.readLine()) |line| {
+        if (try fieldReader.readLine()) |line| {
             _ = line;
         }
     }

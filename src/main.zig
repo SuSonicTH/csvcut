@@ -5,7 +5,7 @@ const Options = @import("options.zig").Options;
 const Filter = @import("options.zig").Filter;
 const ArgumentParser = @import("arguments.zig").Parser;
 const Utf8Output = @import("Utf8Output.zig");
-const CsvLineReader = @import("CsvLineReader.zig");
+const FieldReader = @import("FieldReader.zig");
 const FormatWriter = @import("FormatWriter.zig").FormatWriter;
 const FieldWidths = @import("FieldWidths.zig");
 
@@ -29,6 +29,10 @@ pub fn main() !void {
     defer options.deinit();
 
     try ArgumentParser.parse(&options, args);
+
+    for (options.lengths.?.items, 0..) |len, i| {
+        _ = try std.io.getStdErr().writer().print("{d}:{d}\n", .{ i, len });
+    }
 
     const stderr = std.io.getStdErr().writer();
 
@@ -200,9 +204,9 @@ const OutputWriter = struct {
 };
 
 fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
-    var csvLineReader: CsvLineReader = try CsvLineReader.init(lineReader, options.inputLimit, options.skipLine, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null }, allocator);
+    var fieldReader: FieldReader = try FieldReader.initCsv(lineReader, options.inputLimit, options.skipLine, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null }, allocator);
     if (options.listHeader) {
-        try listHeader(&csvLineReader);
+        try listHeader(&fieldReader);
         return;
     }
 
@@ -210,21 +214,21 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
     try CountAggregator.init();
 
     if (options.fileHeader) {
-        if (try csvLineReader.readLine()) |fields| {
+        if (try fieldReader.readLine()) |fields| {
             try options.setHeaderFields(fields);
         }
-        csvLineReader.resetLinesRead();
+        fieldReader.resetLinesRead();
     }
 
     try options.calculateSelectionIndices();
-    try csvLineReader.setSelectionIndices(options.selectionIndices);
+    try fieldReader.setSelectionIndices(options.selectionIndices);
 
     if (options.filterFields != null) {
         try options.setFilterIndices();
-        csvLineReader.setFilterFields(options.filterFields);
+        fieldReader.setFilterFields(options.filterFields);
     }
 
-    var fieldWidths = try FieldWidths.init(options.outputFormat, options.fileHeader, &csvLineReader, allocator);
+    var fieldWidths = try FieldWidths.init(options.outputFormat, options.fileHeader, &fieldReader, allocator);
     defer fieldWidths.deinit();
 
     var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
@@ -233,17 +237,17 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
 
     if (options.header != null and options.outputHeader) {
         if (options.count) {
-            const selectedHeader = &(try csvLineReader.getSelectedFields(options.header.?)).?;
+            const selectedHeader = &(try fieldReader.getSelectedFields(options.header.?)).?;
             const header = try (try Fields.init(selectedHeader)).get();
             header.*[header.*.len - 1] = "Count";
             try OutputWriter.writeDirect(header, true);
         } else {
-            try OutputWriter.writeDirect(&(try csvLineReader.getSelectedFields(options.header.?)).?, true);
+            try OutputWriter.writeDirect(&(try fieldReader.getSelectedFields(options.header.?)).?, true);
         }
     }
 
     var linesWritten: usize = 0;
-    while (try csvLineReader.readLine()) |fields| {
+    while (try fieldReader.readLine()) |fields| {
         if (options.unique) {
             try OutputWriter.writeBuffered(&fields, false);
 
@@ -277,9 +281,9 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
     try bufferedWriter.flush();
 }
 
-fn listHeader(csvLineReader: *CsvLineReader) !void {
+fn listHeader(fieldReader: *FieldReader) !void {
     const out = std.io.getStdOut();
-    if (try csvLineReader.readLine()) |fields| {
+    if (try fieldReader.readLine()) |fields| {
         for (fields) |field| {
             _ = try out.write(field);
             _ = try out.write("\n");
