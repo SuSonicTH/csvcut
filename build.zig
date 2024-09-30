@@ -14,6 +14,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const memMapper = b.dependency("MemMapper", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     const exe = b.addExecutable(.{
         .name = "csvcut",
         .root_source_file = b.path("src/main.zig"),
@@ -23,6 +28,7 @@ pub fn build(b: *std.Build) void {
 
     exe.root_module.addImport("LineReader", lineReader.module("LineReader"));
     exe.root_module.addImport("CsvLine", csvLine.module("CsvLine"));
+    exe.root_module.addImport("MemMapper", memMapper.module("MemMapper"));
 
     if (optimize != .Debug) {
         exe.root_module.strip = true;

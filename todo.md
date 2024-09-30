@@ -16,7 +16,8 @@
 * --count causes segfault fith aligned outputs
 
 ## improvements
-
+* add option to read (default) arguments from file, searched in ~/.config/csvcut or CWD
+  
 ### change argument logic
 * maybe instead of 2 options to select columns (--fields and --indices) just have --fields and prefix indices with a special character  (e.g. --fields ID,NAME,%5) could come handy for the planned additional --sum feature (else it also needs 2 options)
 

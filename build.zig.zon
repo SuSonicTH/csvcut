@@ -11,6 +11,10 @@
             .url = "https://github.com/SuSonicTH/zigLineReader/archive/75bdee82e5dd31473f4f869c69d542c09fddf67d.tar.gz",
             .hash = "1220792e00e91acc89ee373fdeee54079c4d8039e2f82af67942c2a9b3793f867cff",
         },
+        .MemMapper = .{
+            .url = "https://github.com/SuSonicTH/zigMemMapper/archive/9810b04516fd59bfdedd89ae2ad4374015fbd158.tar.gz",
+            .hash = "1220dc6999d2edd1cd38a75bf6e4cfad758dd82d4c89f72e258fff4799309af30227",
+        },
     },
     .paths = .{
         "build.zig",

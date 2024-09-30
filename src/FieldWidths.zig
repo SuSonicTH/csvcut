@@ -10,15 +10,11 @@ allocator: ?std.mem.Allocator = null,
 widths: []usize = undefined,
 maxSpace: usize = undefined,
 
-pub fn init(outputFormat: OutputFormat, hasHeader: bool, fieldReader: *FieldReader, allocator: std.mem.Allocator) !Self {
+pub fn init(outputFormat: OutputFormat, fileHeader: bool, header: ?[][]const u8, fieldReader: *FieldReader, allocator: std.mem.Allocator) !Self {
     switch (outputFormat) {
         .markdown, .jira, .table => {
-            if (hasHeader) {
-                try fieldReader.reset();
-            }
-
-            const widths = try collectWidths(fieldReader, allocator, outputFormat);
-            try resetReader(fieldReader, hasHeader);
+            const widths = try collectWidths(fieldReader, header, allocator, outputFormat);
+            try resetReader(fieldReader, fileHeader);
 
             return .{
                 .allocator = allocator,
@@ -36,9 +32,13 @@ pub fn deinit(self: *Self) void {
     }
 }
 
-fn collectWidths(fieldReader: *FieldReader, allocator: std.mem.Allocator, outputFormat: OutputFormat) ![]usize {
+fn collectWidths(fieldReader: *FieldReader, header: ?[][]const u8, allocator: std.mem.Allocator, outputFormat: OutputFormat) ![]usize {
     var fieldWidths: []usize = undefined;
-    if (try fieldReader.readLine()) |fields| {
+    if (header) |head| {
+        fieldWidths = try allocator.alloc(usize, head.len);
+        @memset(fieldWidths, 0);
+        updateFieldWidths(outputFormat, head, fieldWidths);
+    } else if (try fieldReader.readLine()) |fields| {
         fieldWidths = try allocator.alloc(usize, fields.len);
         @memset(fieldWidths, 0);
         updateFieldWidths(outputFormat, fields, fieldWidths);
@@ -60,9 +60,9 @@ inline fn updateFieldWidths(outputFormat: OutputFormat, fields: [][]const u8, fi
     }
 }
 
-inline fn resetReader(fieldReader: *FieldReader, hasHeader: bool) !void {
+inline fn resetReader(fieldReader: *FieldReader, fileHeader: bool) !void {
     try fieldReader.reset();
-    if (hasHeader) {
+    if (fileHeader) {
         if (try fieldReader.readLine()) |line| {
             _ = line;
         }

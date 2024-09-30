@@ -2,6 +2,7 @@ const std = @import("std");
 const LineReader = @import("LineReader").LineReader;
 const CsvLine = @import("CsvLine");
 const Filter = @import("options.zig").Filter;
+const MemMapper = @import("MemMapper").MemMapper;
 
 allocator: std.mem.Allocator,
 inputLimit: usize,
@@ -18,6 +19,15 @@ const Self = @This();
 pub fn initCsv(lineReader: *LineReader, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !Self {
     return .{
         .readerImpl = try ReaderImpl.initCsv(lineReader, csvLineOptions, allocator),
+        .allocator = allocator,
+        .inputLimit = inputLimit,
+        .skipLine = skipLine,
+    };
+}
+
+pub fn initWidth(file: *std.fs.File, widhts: []usize, trim: bool, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), allocator: std.mem.Allocator) !Self {
+    return .{
+        .readerImpl = try ReaderImpl.initWidth(file, widhts, trim, allocator),
         .allocator = allocator,
         .inputLimit = inputLimit,
         .skipLine = skipLine,
@@ -116,9 +126,9 @@ const ReaderImpl = union(enum) {
         };
     }
 
-    fn initWidth() !ReaderImpl {
+    fn initWidth(file: *std.fs.File, widhts: []usize, trim: bool, allocator: std.mem.Allocator) !ReaderImpl {
         return .{
-            .width = WidthReader.init(),
+            .width = try WidthReader.init(file, widhts, trim, allocator),
         };
     }
 
@@ -178,25 +188,84 @@ const CsvReader = struct {
     }
 };
 
+const FieldProperty = struct {
+    pos: usize,
+    length: usize,
+};
+
 const WidthReader = struct {
-    fn init() !WidthReader {
-        return .{};
+    allocator: std.mem.Allocator,
+    memMapper: MemMapper,
+    trim: bool,
+    data: []u8 = undefined,
+    fieldProperties: ?[]FieldProperty = null,
+    recordSize: usize = 0,
+    fields: ?[][]const u8 = undefined,
+    pos: usize = 0,
+
+    fn init(file: *std.fs.File, widhts: []usize, trim: bool, allocator: std.mem.Allocator) !WidthReader {
+        var reader: WidthReader = .{
+            .allocator = allocator,
+            .memMapper = try MemMapper.init(file.*, false),
+            .trim = trim,
+        };
+        errdefer reader.deinit();
+        reader.data = try reader.memMapper.map(u8, .{});
+        reader.recordSize = try calculateFieldProperties(&reader, widhts);
+        reader.fields = try allocator.alloc([]u8, widhts.len);
+        return reader;
     }
 
     fn deinit(self: *WidthReader) void {
-        _ = self;
+        self.memMapper.unmap(self.data);
+        self.memMapper.deinit();
+        if (self.fieldProperties) |properties| {
+            self.allocator.free(properties);
+        }
+        if (self.fields) |fields| {
+            self.allocator.free(fields);
+        }
+    }
+
+    fn calculateFieldProperties(self: *WidthReader, widhts: []usize) !usize {
+        self.fieldProperties = try self.allocator.alloc(FieldProperty, widhts.len);
+        var start: usize = 0;
+        for (widhts, 0..) |width, i| {
+            self.fieldProperties.?[i].pos = start;
+            self.fieldProperties.?[i].length = width;
+            start += width;
+        }
+        return start;
     }
 
     fn reset(self: *WidthReader) !void {
-        _ = self;
+        self.pos = 0;
     }
 
     fn skipLine(self: *WidthReader) !void {
-        _ = self;
+        _ = try self.readLine();
+    }
+
+    inline fn readLine(self: *WidthReader) !?[]const u8 {
+        if (self.pos + self.recordSize < self.data.len) {
+            const current = self.pos;
+            self.pos += self.recordSize;
+            return self.data[current .. current + self.recordSize];
+        }
+        return null;
     }
 
     fn getFields(self: *WidthReader) !?[][]const u8 {
-        _ = self;
+        if (try self.readLine()) |line| {
+            for (self.fieldProperties.?, 0..) |property, i| {
+                if (self.trim) {
+                    self.fields.?[i] = std.mem.trim(u8, line[property.pos .. property.pos + property.length], " \t");
+                } else {
+                    self.fields.?[i] = line[property.pos .. property.pos + property.length];
+                }
+            }
+            return self.fields;
+        }
         return null;
     }
 };

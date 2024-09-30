@@ -30,10 +30,6 @@ pub fn main() !void {
 
     try ArgumentParser.parse(&options, args);
 
-    for (options.lengths.?.items, 0..) |len, i| {
-        _ = try std.io.getStdErr().writer().print("{d}:{d}\n", .{ i, len });
-    }
-
     const stderr = std.io.getStdErr().writer();
 
     if (options.useStdin) {
@@ -46,7 +42,8 @@ pub fn main() !void {
         }
         var lineReader = try LineReader.initReader(std.io.getStdIn().reader().any(), allocator, .{});
         defer lineReader.deinit();
-        try proccessFile(&lineReader, std.io.getStdOut());
+        var fieldReader: FieldReader = try FieldReader.initCsv(&lineReader, options.inputLimit, options.skipLine, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null }, allocator);
+        try proccessFile(&fieldReader, std.io.getStdOut());
     } else {
         for (options.inputFiles.items) |file| {
             try processFileByName(file);
@@ -65,9 +62,16 @@ pub fn main() !void {
 fn processFileByName(fileName: []const u8) !void {
     var file = try std.fs.cwd().openFile(fileName, .{});
     defer file.close();
-    var lineReader = try LineReader.initFile(&file, allocator, .{});
-    defer lineReader.deinit();
-    try proccessFile(&lineReader, std.io.getStdOut());
+
+    if (options.lengths) |lengths| {
+        var fieldReader: FieldReader = try FieldReader.initWidth(&file, lengths.items, options.trim, options.inputLimit, options.skipLine, allocator);
+        try proccessFile(&fieldReader, std.io.getStdOut());
+    } else {
+        var lineReader = try LineReader.initFile(&file, allocator, .{});
+        defer lineReader.deinit();
+        var fieldReader: FieldReader = try FieldReader.initCsv(&lineReader, options.inputLimit, options.skipLine, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null }, allocator);
+        try proccessFile(&fieldReader, std.io.getStdOut());
+    }
 }
 
 const Fields = struct {
@@ -203,10 +207,9 @@ const OutputWriter = struct {
     }
 };
 
-fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
-    var fieldReader: FieldReader = try FieldReader.initCsv(lineReader, options.inputLimit, options.skipLine, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null }, allocator);
+fn proccessFile(fieldReader: *FieldReader, outputFile: std.fs.File) !void {
     if (options.listHeader) {
-        try listHeader(&fieldReader);
+        try listHeader(fieldReader);
         return;
     }
 
@@ -228,7 +231,7 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
         fieldReader.setFilterFields(options.filterFields);
     }
 
-    var fieldWidths = try FieldWidths.init(options.outputFormat, options.fileHeader, &fieldReader, allocator);
+    var fieldWidths = try FieldWidths.init(options.outputFormat, options.fileHeader, options.header, fieldReader, allocator);
     defer fieldWidths.deinit();
 
     var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
