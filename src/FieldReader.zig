@@ -16,18 +16,27 @@ readerImpl: ReaderImpl,
 
 const Self = @This();
 
-pub fn initCsv(lineReader: *LineReader, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !Self {
+pub fn initCsvFile(file: *std.fs.File, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !Self {
     return .{
-        .readerImpl = try ReaderImpl.initCsv(lineReader, csvLineOptions, allocator),
+        .readerImpl = try ReaderImpl.initCsvFile(file, csvLineOptions, allocator),
         .allocator = allocator,
         .inputLimit = inputLimit,
         .skipLine = skipLine,
     };
 }
 
-pub fn initWidth(file: *std.fs.File, widhts: []usize, trim: bool, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), allocator: std.mem.Allocator) !Self {
+pub fn initCsvReader(reader: std.io.AnyReader, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !Self {
     return .{
-        .readerImpl = try ReaderImpl.initWidth(file, widhts, trim, allocator),
+        .readerImpl = try ReaderImpl.initCsvReader(reader, csvLineOptions, allocator),
+        .allocator = allocator,
+        .inputLimit = inputLimit,
+        .skipLine = skipLine,
+    };
+}
+
+pub fn initWidthFile(file: *std.fs.File, widhts: []usize, trim: bool, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), allocator: std.mem.Allocator) !Self {
+    return .{
+        .readerImpl = try ReaderImpl.initWidthFile(file, widhts, trim, allocator),
         .allocator = allocator,
         .inputLimit = inputLimit,
         .skipLine = skipLine,
@@ -117,18 +126,25 @@ pub inline fn getSelectedFields(self: *Self, fields: [][]const u8) !?[][]const u
 }
 
 const ReaderImpl = union(enum) {
-    csv: CsvReader,
-    width: WidthReader,
+    csvFile: CsvFileReader,
+    csvReader: CsvReader,
+    widthFile: WidthFileReader,
 
-    fn initCsv(lineReader: *LineReader, csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !ReaderImpl {
+    fn initCsvFile(file: *std.fs.File, csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !ReaderImpl {
         return .{
-            .csv = try CsvReader.init(lineReader, csvLineOptions, allocator),
+            .csvFile = try CsvFileReader.init(file, csvLineOptions, allocator),
         };
     }
 
-    fn initWidth(file: *std.fs.File, widhts: []usize, trim: bool, allocator: std.mem.Allocator) !ReaderImpl {
+    fn initCsvReader(reader: std.io.AnyReader, csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !ReaderImpl {
         return .{
-            .width = try WidthReader.init(file, widhts, trim, allocator),
+            .csvReader = try CsvReader.init(reader, csvLineOptions, allocator),
+        };
+    }
+
+    fn initWidthFile(file: *std.fs.File, widhts: []usize, trim: bool, allocator: std.mem.Allocator) !ReaderImpl {
+        return .{
+            .widthFile = try WidthFileReader.init(file, widhts, trim, allocator),
         };
     }
 
@@ -157,13 +173,50 @@ const ReaderImpl = union(enum) {
     }
 };
 
+const CsvFileReader = struct {
+    lineReader: *LineReader,
+    csvLine: CsvLine.CsvLine,
+
+    fn init(file: *std.fs.File, csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !CsvFileReader {
+        var reader = try LineReader.initFile(file, allocator, .{});
+        errdefer reader.deinit();
+
+        return .{
+            .lineReader = &reader,
+            .csvLine = try CsvLine.CsvLine.init(allocator, csvLineOptions),
+        };
+    }
+
+    fn deinit(self: *CsvFileReader) void {
+        self.csvLine.free();
+    }
+
+    fn reset(self: *CsvFileReader) !void {
+        try self.lineReader.reset();
+    }
+
+    fn skipLine(self: *CsvFileReader) !void {
+        _ = try self.lineReader.*.readLine();
+    }
+
+    fn getFields(self: *CsvFileReader) !?[][]const u8 {
+        if (try self.lineReader.*.readLine()) |line| {
+            return try self.csvLine.parse(line);
+        }
+        return null;
+    }
+};
+
 const CsvReader = struct {
     lineReader: *LineReader,
     csvLine: CsvLine.CsvLine,
 
-    fn init(lineReader: *LineReader, csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !CsvReader {
+    fn init(reader: std.io.AnyReader, csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !CsvReader {
+        var lreader = try LineReader.initReader(reader, allocator, .{});
+        errdefer lreader.deinit();
+
         return .{
-            .lineReader = lineReader,
+            .lineReader = &lreader,
             .csvLine = try CsvLine.CsvLine.init(allocator, csvLineOptions),
         };
     }
@@ -193,7 +246,7 @@ const FieldProperty = struct {
     length: usize,
 };
 
-const WidthReader = struct {
+const WidthFileReader = struct {
     allocator: std.mem.Allocator,
     memMapper: MemMapper,
     trim: bool,
@@ -203,8 +256,8 @@ const WidthReader = struct {
     fields: ?[][]const u8 = undefined,
     pos: usize = 0,
 
-    fn init(file: *std.fs.File, widhts: []usize, trim: bool, allocator: std.mem.Allocator) !WidthReader {
-        var reader: WidthReader = .{
+    fn init(file: *std.fs.File, widhts: []usize, trim: bool, allocator: std.mem.Allocator) !WidthFileReader {
+        var reader: WidthFileReader = .{
             .allocator = allocator,
             .memMapper = try MemMapper.init(file.*, false),
             .trim = trim,
@@ -216,7 +269,7 @@ const WidthReader = struct {
         return reader;
     }
 
-    fn deinit(self: *WidthReader) void {
+    fn deinit(self: *WidthFileReader) void {
         self.memMapper.unmap(self.data);
         self.memMapper.deinit();
         if (self.fieldProperties) |properties| {
@@ -227,7 +280,7 @@ const WidthReader = struct {
         }
     }
 
-    fn calculateFieldProperties(self: *WidthReader, widhts: []usize) !usize {
+    fn calculateFieldProperties(self: *WidthFileReader, widhts: []usize) !usize {
         self.fieldProperties = try self.allocator.alloc(FieldProperty, widhts.len);
         var start: usize = 0;
         for (widhts, 0..) |width, i| {
@@ -238,15 +291,15 @@ const WidthReader = struct {
         return start;
     }
 
-    fn reset(self: *WidthReader) !void {
+    fn reset(self: *WidthFileReader) !void {
         self.pos = 0;
     }
 
-    fn skipLine(self: *WidthReader) !void {
+    fn skipLine(self: *WidthFileReader) !void {
         _ = try self.readLine();
     }
 
-    inline fn readLine(self: *WidthReader) !?[]const u8 {
+    inline fn readLine(self: *WidthFileReader) !?[]const u8 {
         if (self.pos + self.recordSize < self.data.len) {
             const current = self.pos;
             self.pos += self.recordSize;
@@ -255,7 +308,7 @@ const WidthReader = struct {
         return null;
     }
 
-    fn getFields(self: *WidthReader) !?[][]const u8 {
+    fn getFields(self: *WidthFileReader) !?[][]const u8 {
         if (try self.readLine()) |line| {
             for (self.fieldProperties.?, 0..) |property, i| {
                 if (self.trim) {

@@ -1,5 +1,4 @@
 const std = @import("std");
-const LineReader = @import("LineReader").LineReader;
 const CsvLine = @import("CsvLine").CsvLine;
 const Options = @import("options.zig").Options;
 const Filter = @import("options.zig").Filter;
@@ -40,9 +39,7 @@ pub fn main() !void {
             },
             else => {},
         }
-        var lineReader = try LineReader.initReader(std.io.getStdIn().reader().any(), allocator, .{});
-        defer lineReader.deinit();
-        var fieldReader: FieldReader = try FieldReader.initCsv(&lineReader, options.inputLimit, options.skipLine, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null }, allocator);
+        var fieldReader: FieldReader = try FieldReader.initCsvReader(std.io.getStdIn().reader().any(), options.inputLimit, options.skipLine, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null }, allocator);
         try proccessFile(&fieldReader, std.io.getStdOut());
     } else {
         for (options.inputFiles.items) |file| {
@@ -64,12 +61,10 @@ fn processFileByName(fileName: []const u8) !void {
     defer file.close();
 
     if (options.lengths) |lengths| {
-        var fieldReader: FieldReader = try FieldReader.initWidth(&file, lengths.items, options.trim, options.inputLimit, options.skipLine, allocator);
+        var fieldReader: FieldReader = try FieldReader.initWidthFile(&file, lengths.items, options.trim, options.inputLimit, options.skipLine, allocator);
         try proccessFile(&fieldReader, std.io.getStdOut());
     } else {
-        var lineReader = try LineReader.initFile(&file, allocator, .{});
-        defer lineReader.deinit();
-        var fieldReader: FieldReader = try FieldReader.initCsv(&lineReader, options.inputLimit, options.skipLine, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null }, allocator);
+        var fieldReader: FieldReader = try FieldReader.initCsvFile(&file, options.inputLimit, options.skipLine, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null }, allocator);
         try proccessFile(&fieldReader, std.io.getStdOut());
     }
 }
