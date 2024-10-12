@@ -39,8 +39,13 @@ pub fn main() !void {
             },
             else => {},
         }
-        var fieldReader: FieldReader = try FieldReader.initCsvReader(std.io.getStdIn().reader().any(), options.inputLimit, options.skipLine, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null }, allocator);
-        try proccessFile(&fieldReader, std.io.getStdOut());
+        if (options.lengths) |lengths| {
+            var fieldReader: FieldReader = try FieldReader.initWidthReader(std.io.getStdIn().reader().any(), lengths.items, options.trim, options.inputLimit, options.skipLine, allocator);
+            try proccessFile(&fieldReader, std.io.getStdOut());
+        } else {
+            var fieldReader: FieldReader = try FieldReader.initCsvReader(std.io.getStdIn().reader().any(), options.inputLimit, options.skipLine, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null }, allocator);
+            try proccessFile(&fieldReader, std.io.getStdOut());
+        }
     } else {
         for (options.inputFiles.items) |file| {
             try processFileByName(file);
