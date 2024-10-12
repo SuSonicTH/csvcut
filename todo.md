@@ -2,6 +2,7 @@
 
 ## additional features
 * add option to read (default) arguments from file, searched in ~/.config/csvcut or CWD
+* fixedWidth parsing, add argument to expect (and ignore) CR,LF or CRLF
 * diff 2 csv files
 * paged output
 * option to filter the last x lines (trailer), maybe as part of index filter with negative sign (i.e. --filterLine -1,-2 filters last 2 lines)
