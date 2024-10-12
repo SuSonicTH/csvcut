@@ -20,14 +20,9 @@ pub const OutputFormat = enum {
     jsonArray,
 };
 
-const SelectionType = enum {
-    name,
-    index,
-};
-
-const Selection = struct {
-    type: SelectionType,
-    field: []const u8,
+const Selection = union(enum) {
+    name: []const u8,
+    index: usize,
 };
 
 const OptionError = error{
@@ -99,13 +94,23 @@ pub const Options = struct {
         return &(self.csvLine.?);
     }
 
-    pub fn addIndex(self: *Options, selectionType: SelectionType, fields: []u8) !void {
+    pub fn addInclude(self: *Options, fields: []u8) !void {
         if (self.selectedFields == null) {
             self.selectedFields = std.ArrayList(Selection).init(self.allocator);
         }
         for ((try (try self.getCsvLine()).parse(fields))) |field| {
-            try self.selectedFields.?.append(.{ .type = selectionType, .field = field });
+            if (toNumber(field)) |index| {
+                try self.selectedFields.?.append(.{ .index = index - 1 });
+            } else if (field[0] == '\\') {
+                try self.selectedFields.?.append(.{ .name = field[1..] });
+            } else {
+                try self.selectedFields.?.append(.{ .name = field });
+            }
         }
+    }
+
+    fn toNumber(field: []const u8) ?usize {
+        return std.fmt.parseInt(usize, field, 10) catch null;
     }
 
     pub fn calculateSelectionIndices(self: *Options) !void {
@@ -113,9 +118,9 @@ pub const Options = struct {
         self.selectionIndices = try self.allocator.alloc(usize, self.selectedFields.?.items.len);
 
         for (self.selectedFields.?.items, 0..) |item, i| {
-            switch (item.type) {
-                .index => self.selectionIndices.?[i] = (try std.fmt.parseInt(usize, item.field, 10)) - 1,
-                .name => self.selectionIndices.?[i] = try getHeaderIndex(self, item.field),
+            switch (item) {
+                .index => |index| self.selectionIndices.?[i] = index,
+                .name => |name| self.selectionIndices.?[i] = try getHeaderIndex(self, name),
             }
         }
     }

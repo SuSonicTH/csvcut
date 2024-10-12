@@ -22,10 +22,8 @@ const Argument = enum {
     @"--outputQuoute",
     @"-N",
     @"--outputNoHeader",
-    @"-F",
-    @"--fields",
     @"-I",
-    @"--indices",
+    @"--include",
     @"--trim",
     @"--filter",
     @"--format",
@@ -153,12 +151,8 @@ pub const Parser = struct {
                     },
                     .@"-n", .@"--noHeader" => options.fileHeader = false,
                     .@"-N", .@"--outputNoHeader" => options.outputHeader = false,
-                    .@"-F", .@"--fields" => {
-                        try options.addIndex(.name, try argumentValue(args, index, arg));
-                        skipNext();
-                    },
-                    .@"-I", .@"--indices" => {
-                        try options.addIndex(.index, try argumentValue(args, index, arg));
+                    .@"-I", .@"--include" => {
+                        try options.addInclude(try argumentValue(args, index, arg));
                         skipNext();
                     },
                     .@"--filter" => {
