@@ -208,17 +208,16 @@ const CsvFileReader = struct {
 };
 
 const CsvReader = struct {
-    lineReader: *LineReader,
-    csvLine: CsvLine.CsvLine,
+    lineReader: LineReader,
+    csvLine: CsvLine.CsvLine = undefined,
 
     fn init(reader: std.io.AnyReader, csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !CsvReader {
-        var lreader = try LineReader.initReader(reader, allocator, .{});
-        errdefer lreader.deinit();
-
-        return .{
-            .lineReader = &lreader,
-            .csvLine = try CsvLine.CsvLine.init(allocator, csvLineOptions),
+        var csvReader: CsvReader = .{
+            .lineReader = try LineReader.initReader(reader, allocator, .{}),
         };
+        errdefer csvReader.lineReader.deinit();
+        csvReader.csvLine = try CsvLine.CsvLine.init(allocator, csvLineOptions);
+        return csvReader;
     }
 
     fn deinit(self: *CsvReader) void {
@@ -230,11 +229,11 @@ const CsvReader = struct {
     }
 
     fn skipLine(self: *CsvReader) !void {
-        _ = try self.lineReader.*.readLine();
+        _ = try self.lineReader.readLine();
     }
 
     fn getFields(self: *CsvReader) !?[][]const u8 {
-        if (try self.lineReader.*.readLine()) |line| {
+        if (try self.lineReader.readLine()) |line| {
             return try self.csvLine.parse(line);
         }
         return null;
