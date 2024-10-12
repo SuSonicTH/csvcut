@@ -1,11 +1,10 @@
 const std = @import("std");
-const LineReader = @import("LineReader").LineReader;
 const CsvLine = @import("CsvLine").CsvLine;
 const Options = @import("options.zig").Options;
 const Filter = @import("options.zig").Filter;
 const ArgumentParser = @import("arguments.zig").Parser;
 const Utf8Output = @import("Utf8Output.zig");
-const CsvLineReader = @import("CsvLineReader.zig");
+const FieldReader = @import("FieldReader.zig");
 const FormatWriter = @import("FormatWriter.zig").FormatWriter;
 const FieldWidths = @import("FieldWidths.zig");
 
@@ -40,9 +39,13 @@ pub fn main() !void {
             },
             else => {},
         }
-        var lineReader = try LineReader.initReader(std.io.getStdIn().reader().any(), allocator, .{});
-        defer lineReader.deinit();
-        try proccessFile(&lineReader, std.io.getStdOut());
+        if (options.lengths) |lengths| {
+            var fieldReader: FieldReader = try FieldReader.initWidthReader(std.io.getStdIn().reader().any(), lengths.items, options.trim, options.inputLimit, options.skipLine, allocator);
+            try proccessFile(&fieldReader, std.io.getStdOut());
+        } else {
+            var fieldReader: FieldReader = try FieldReader.initCsvReader(std.io.getStdIn().reader().any(), options.inputLimit, options.skipLine, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null }, allocator);
+            try proccessFile(&fieldReader, std.io.getStdOut());
+        }
     } else {
         for (options.inputFiles.items) |file| {
             try processFileByName(file);
@@ -61,9 +64,14 @@ pub fn main() !void {
 fn processFileByName(fileName: []const u8) !void {
     var file = try std.fs.cwd().openFile(fileName, .{});
     defer file.close();
-    var lineReader = try LineReader.initFile(&file, allocator, .{});
-    defer lineReader.deinit();
-    try proccessFile(&lineReader, std.io.getStdOut());
+
+    if (options.lengths) |lengths| {
+        var fieldReader: FieldReader = try FieldReader.initWidthFile(&file, lengths.items, options.trim, options.inputLimit, options.skipLine, allocator);
+        try proccessFile(&fieldReader, std.io.getStdOut());
+    } else {
+        var fieldReader: FieldReader = try FieldReader.initCsvFile(&file, options.inputLimit, options.skipLine, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null }, allocator);
+        try proccessFile(&fieldReader, std.io.getStdOut());
+    }
 }
 
 const Fields = struct {
@@ -199,10 +207,9 @@ const OutputWriter = struct {
     }
 };
 
-fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
-    var csvLineReader: CsvLineReader = try CsvLineReader.init(lineReader, options.inputLimit, options.skipLine, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null }, allocator);
+fn proccessFile(fieldReader: *FieldReader, outputFile: std.fs.File) !void {
     if (options.listHeader) {
-        try listHeader(&csvLineReader);
+        try listHeader(fieldReader);
         return;
     }
 
@@ -210,21 +217,21 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
     try CountAggregator.init();
 
     if (options.fileHeader) {
-        if (try csvLineReader.readLine()) |fields| {
+        if (try fieldReader.readLine()) |fields| {
             try options.setHeaderFields(fields);
         }
-        csvLineReader.resetLinesRead();
+        fieldReader.resetLinesRead();
     }
 
     try options.calculateSelectionIndices();
-    try csvLineReader.setSelectionIndices(options.selectionIndices);
+    try fieldReader.setSelectionIndices(options.selectionIndices);
 
     if (options.filterFields != null) {
         try options.setFilterIndices();
-        csvLineReader.setFilterFields(options.filterFields);
+        fieldReader.setFilterFields(options.filterFields);
     }
 
-    var fieldWidths = try FieldWidths.init(options.outputFormat, options.fileHeader, &csvLineReader, allocator);
+    var fieldWidths = try FieldWidths.init(options.outputFormat, options.fileHeader, options.header, fieldReader, allocator);
     defer fieldWidths.deinit();
 
     var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
@@ -233,17 +240,17 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
 
     if (options.header != null and options.outputHeader) {
         if (options.count) {
-            const selectedHeader = &(try csvLineReader.getSelectedFields(options.header.?)).?;
+            const selectedHeader = &(try fieldReader.getSelectedFields(options.header.?)).?;
             const header = try (try Fields.init(selectedHeader)).get();
             header.*[header.*.len - 1] = "Count";
             try OutputWriter.writeDirect(header, true);
         } else {
-            try OutputWriter.writeDirect(&(try csvLineReader.getSelectedFields(options.header.?)).?, true);
+            try OutputWriter.writeDirect(&(try fieldReader.getSelectedFields(options.header.?)).?, true);
         }
     }
 
     var linesWritten: usize = 0;
-    while (try csvLineReader.readLine()) |fields| {
+    while (try fieldReader.readLine()) |fields| {
         if (options.unique) {
             try OutputWriter.writeBuffered(&fields, false);
 
@@ -277,9 +284,9 @@ fn proccessFile(lineReader: *LineReader, outputFile: std.fs.File) !void {
     try bufferedWriter.flush();
 }
 
-fn listHeader(csvLineReader: *CsvLineReader) !void {
+fn listHeader(fieldReader: *FieldReader) !void {
     const out = std.io.getStdOut();
-    if (try csvLineReader.readLine()) |fields| {
+    if (try fieldReader.readLine()) |fields| {
         for (fields) |field| {
             _ = try out.write(field);
             _ = try out.write("\n");
