@@ -12,8 +12,8 @@
   * excel
 
 ## fixes
-* figure out why stdin processing is much slower then file processing
-* --count causes segfault fith aligned outputs
+* figure out why stdin processing is much slower then file processing in gitbash (ok in cmd, faster in WSL on ext4)
+* --count causes segfault with aligned outputs
 
 ## improvements
 * add option to read (default) arguments from file, searched in ~/.config/csvcut or CWD
