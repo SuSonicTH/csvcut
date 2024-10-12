@@ -43,7 +43,7 @@ pub fn main() !void {
             var fieldReader: FieldReader = try FieldReader.initWidthReader(std.io.getStdIn().reader().any(), lengths.items, options.trim, options.inputLimit, options.skipLine, allocator);
             try proccessFile(&fieldReader, std.io.getStdOut());
         } else {
-            var fieldReader: FieldReader = try FieldReader.initCsvReader(std.io.getStdIn().reader().any(), options.inputLimit, options.skipLine, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null }, allocator);
+            var fieldReader: FieldReader = try FieldReader.initCsvReader(std.io.getStdIn().reader().any(), options.inputLimit, options.skipLine, .{ .separator = options.inputSeparator[0], .trim = options.trim, .quoute = if (options.inputQuoute) |quote| quote[0] else null }, allocator);
             try proccessFile(&fieldReader, std.io.getStdOut());
         }
     } else {
@@ -69,7 +69,7 @@ fn processFileByName(fileName: []const u8) !void {
         var fieldReader: FieldReader = try FieldReader.initWidthFile(&file, lengths.items, options.trim, options.inputLimit, options.skipLine, allocator);
         try proccessFile(&fieldReader, std.io.getStdOut());
     } else {
-        var fieldReader: FieldReader = try FieldReader.initCsvFile(&file, options.inputLimit, options.skipLine, .{ .separator = options.input_separator[0], .trim = options.trim, .quoute = if (options.input_quoute) |quote| quote[0] else null }, allocator);
+        var fieldReader: FieldReader = try FieldReader.initCsvFile(&file, options.inputLimit, options.skipLine, .{ .separator = options.inputSeparator[0], .trim = options.trim, .quoute = if (options.inputQuoute) |quote| quote[0] else null }, allocator);
         try proccessFile(&fieldReader, std.io.getStdOut());
     }
 }
@@ -223,8 +223,9 @@ fn proccessFile(fieldReader: *FieldReader, outputFile: std.fs.File) !void {
         fieldReader.resetLinesRead();
     }
 
-    try options.calculateSelectionIndices();
-    try fieldReader.setSelectionIndices(options.selectionIndices);
+    try options.calculateSelectedIndices();
+    try fieldReader.setSelectedIndices(options.selectedIndices);
+    try fieldReader.setExcludedIndices(options.excludedIndices);
 
     if (options.filterFields != null) {
         try options.setFilterIndices();

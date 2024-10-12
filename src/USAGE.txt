@@ -58,9 +58,15 @@ Options:
          --outputLimit lim     limit the the number of lines outputted to lim
 
   processing:
-     -I, --include             comma separated list of field names/indices 
+     -I, --include <1,2,3>     comma separated list of field names/indices 
                                use bashlash to escape numeric field names
                                can be used multiple times
+                               cannot be used with --exclude
+
+     -E, --exclude <1,2,3>     comma separated list of field names/indices 
+                               use bashlash to escape numeric field names
+                               can be used multiple times
+                               cannot be used with --include
 
          --filter              list of filters that are applied
                                argument field1=value1,field2=value2,....

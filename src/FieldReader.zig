@@ -9,8 +9,9 @@ inputLimit: usize,
 skipLine: ?std.AutoHashMap(usize, bool),
 lineNumber: usize = 0,
 linesRead: usize = 0,
-selectionIndices: ?[]usize = null,
-selected: [][]const u8 = undefined,
+selectedIndices: ?[]usize = null,
+excludedIndices: ?std.AutoHashMap(usize, bool) = null,
+selected: ?[][]const u8 = null,
 filterFields: ?std.ArrayList(Filter) = null,
 readerImpl: ReaderImpl,
 
@@ -54,7 +55,7 @@ pub fn initWidthReader(reader: std.io.AnyReader, widhts: []usize, trim: bool, in
 
 pub fn deinit(self: *Self) void {
     self.readerImpl.deinit();
-    if (self.selectionIndices != null) {
+    if (self.selectedIndices != null) {
         self.allocator.free(self.selected);
     }
 }
@@ -69,10 +70,16 @@ pub fn resetLinesRead(self: *Self) void {
     self.linesRead = 0;
 }
 
-pub fn setSelectionIndices(self: *Self, selectionIndices: ?[]usize) !void {
-    if (selectionIndices) |indices| {
-        self.selectionIndices = indices;
-        self.selected = try self.allocator.alloc([]u8, selectionIndices.?.len);
+pub fn setSelectedIndices(self: *Self, selectedIndices: ?[]usize) !void {
+    if (selectedIndices) |indices| {
+        self.selectedIndices = indices;
+        self.selected = try self.allocator.alloc([]u8, selectedIndices.?.len);
+    }
+}
+
+pub fn setExcludedIndices(self: *Self, excludedIndices: ?std.AutoHashMap(usize, bool)) !void {
+    if (excludedIndices) |indices| {
+        self.excludedIndices = indices;
     }
 }
 
@@ -124,11 +131,23 @@ inline fn noFilterOrfilterMatches(self: *Self, fields: [][]const u8) bool {
 }
 
 pub inline fn getSelectedFields(self: *Self, fields: [][]const u8) !?[][]const u8 {
-    if (self.selectionIndices) |indices| {
+    if (self.selectedIndices) |indices| {
         for (indices, 0..) |field, index| {
-            self.selected[index] = fields[field];
+            self.selected.?[index] = fields[field];
         }
         return self.selected;
+    } else if (self.excludedIndices) |indices| {
+        if (self.selected == null) {
+            self.selected = try self.allocator.alloc([]u8, fields.len);
+        }
+        var i: usize = 0;
+        for (fields, 0..) |field, index| {
+            if (!indices.contains(index)) {
+                self.selected.?[i] = field;
+                i += 1;
+            }
+        }
+        return self.selected.?[0..i];
     } else {
         return fields;
     }

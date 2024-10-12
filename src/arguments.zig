@@ -24,6 +24,8 @@ const Argument = enum {
     @"--outputNoHeader",
     @"-I",
     @"--include",
+    @"-E",
+    @"--exclude",
     @"--trim",
     @"--filter",
     @"--format",
@@ -66,6 +68,7 @@ const ExitCode = enum(u8) {
     unknownArgumentError,
     argumentWithUnknownValueError,
     argumentValueMissingError,
+    includeAndExcludeTogether,
 
     const useStdinMessage = "\nuse --stdin if you want to process standard input";
 
@@ -82,6 +85,7 @@ const ExitCode = enum(u8) {
             .unknownArgumentError => return "argument '{s}' is unknown",
             .argumentWithUnknownValueError => return "argument '{s}' got unknown value '{s}'",
             .argumentValueMissingError => return "value for argument '{s}' is missing",
+            .includeAndExcludeTogether => return "--include and --exclude cannot be used together",
         }
     }
 
@@ -128,10 +132,10 @@ pub const Parser = struct {
                 }) {
                     .@"--help" => try printUsage(),
                     .@"-v", .@"--version" => try printVersion(),
-                    .@"-s", .@"--separator" => options.input_separator = try getSeparator(args, index, arg),
-                    .@"-q", .@"--quoute" => options.input_quoute = try getQuoute(args, index, arg),
-                    .@"-S", .@"--outputSeparator" => options.output_separator = try getSeparator(args, index, arg),
-                    .@"-Q", .@"--outputQuoute" => options.output_quoute = try getQuoute(args, index, arg),
+                    .@"-s", .@"--separator" => options.inputSeparator = try getSeparator(args, index, arg),
+                    .@"-q", .@"--quoute" => options.inputQuoute = try getQuoute(args, index, arg),
+                    .@"-S", .@"--outputSeparator" => options.outputSeparator = try getSeparator(args, index, arg),
+                    .@"-Q", .@"--outputQuoute" => options.outputQuoute = try getQuoute(args, index, arg),
                     .@"--trim" => options.trim = true,
                     .@"-l", .@"--listHeader" => options.listHeader = true,
                     .@"--unique" => options.unique = true,
@@ -152,7 +156,21 @@ pub const Parser = struct {
                     .@"-n", .@"--noHeader" => options.fileHeader = false,
                     .@"-N", .@"--outputNoHeader" => options.outputHeader = false,
                     .@"-I", .@"--include" => {
-                        try options.addInclude(try argumentValue(args, index, arg));
+                        options.addInclude(try argumentValue(args, index, arg)) catch |err| {
+                            if (err == error.IncludeAndExcludeTogether) {
+                                try ExitCode.includeAndExcludeTogether.printErrorAndExit(.{});
+                            }
+                            return err;
+                        };
+                        skipNext();
+                    },
+                    .@"-E", .@"--exclude" => {
+                        options.addExclude(try argumentValue(args, index, arg)) catch |err| {
+                            if (err == error.IncludeAndExcludeTogether) {
+                                try ExitCode.includeAndExcludeTogether.printErrorAndExit(.{});
+                            }
+                            return err;
+                        };
                         skipNext();
                     },
                     .@"--filter" => {

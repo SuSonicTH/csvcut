@@ -28,7 +28,7 @@ pub const FormatWriter = union(OutputFormat) {
 
     pub fn init(options: Options, allocator: std.mem.Allocator, fieldWidths: FieldWidths) !FormatWriter {
         return switch (options.outputFormat) {
-            .csv => .{ .csv = try CsvWriter.init(.{ .separator = options.output_separator, .quoute = options.output_quoute }) },
+            .csv => .{ .csv = try CsvWriter.init(.{ .separator = options.outputSeparator, .quoute = options.outputQuoute }) },
             .lazyMarkdown => .{ .lazyMarkdown = try LazyMarkdown.init() },
             .lazyJira => .{ .lazyJira = try LazyJira.init() },
             .markdown => .{ .markdown = try Markdown.init(allocator, fieldWidths) },
