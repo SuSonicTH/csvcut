@@ -106,7 +106,7 @@ pub const Options = struct {
         return &(self.csvLine.?);
     }
 
-    pub fn addInclude(self: *Options, fields: []u8) !void {
+    pub fn addInclude(self: *Options, fields: []const u8) !void {
         if (self.excludedFields != null) {
             return error.IncludeAndExcludeTogether;
         } else if (self.includedFields == null) {
@@ -123,7 +123,7 @@ pub const Options = struct {
         }
     }
 
-    pub fn addExclude(self: *Options, fields: []u8) !void {
+    pub fn addExclude(self: *Options, fields: []const u8) !void {
         if (self.includedFields != null) {
             return error.IncludeAndExcludeTogether;
         } else if (self.excludedFields == null) {

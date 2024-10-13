@@ -27,7 +27,8 @@ pub fn main() !void {
     options = try Options.init(allocator);
     defer options.deinit();
 
-    try ArgumentParser.parse(&options, args);
+    try ArgumentParser.parse(&options, args, allocator);
+    try ArgumentParser.checkInputFileGiven(&options);
 
     const stderr = std.io.getStdErr().writer();
 

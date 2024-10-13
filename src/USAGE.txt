@@ -9,6 +9,12 @@ Options:
      -l, --listHeader         print the file header and exit
          --exitCodes          print a list of all exit codes
 
+         --config [file]      config file with list of arguments
+                              file is searched in current directory
+                              then in $HOME/.config/csvcut
+                              pauses argument processing an applies config
+                              then continues to apply command line arguments
+
   input:
      -s, --separator sep        use sep as input field separator
          sep can be one of:
@@ -31,7 +37,7 @@ Options:
 
          --extraLF              with --lengths to read an extra end of line
          --extraCRLF            with --lengths to read 2 extra EOL characters
-         
+
   output formats:
      --format csv               csv file for format options see output section
      --format lazyMarkdown      compact markdown table format 

@@ -1,6 +1,7 @@
 const std = @import("std");
 const Options = @import("options.zig").Options;
 const OutputFormat = @import("options.zig").OutputFormat;
+const readConfigFromFile = @import("config.zig").readConfigFromFile;
 
 const version = "csvcut v0.1\n\n";
 
@@ -41,6 +42,7 @@ const Argument = enum {
     @"--lengths",
     @"--extraLF",
     @"--extraCRLF",
+    @"--config",
 };
 
 const Separator = enum {
@@ -118,7 +120,7 @@ const ExitCode = enum(u8) {
 pub const Parser = struct {
     var skip_next: bool = false;
 
-    pub fn parse(options: *Options, args: [][]u8) !void {
+    pub fn parse(options: *Options, args: [][]const u8, allocator: std.mem.Allocator) !void {
         if (args.len == 1) {
             try ExitCode.noArgumentError.printErrorAndExit(.{});
         }
@@ -199,20 +201,19 @@ pub const Parser = struct {
                     },
                     .@"--extraLF" => options.extraLineEnd = 1,
                     .@"--extraCRLF" => options.extraLineEnd = 2,
+                    .@"--config" => {
+                        const arguments = try readConfigFromFile(try argumentValue(args, index, arg), allocator);
+                        try parse(options, arguments.items, allocator);
+                        skipNext();
+                    },
                 }
             } else {
                 try options.inputFiles.append(arg);
             }
         }
-
-        if (!options.useStdin and options.inputFiles.items.len == 0) {
-            try ExitCode.noInputError.printErrorAndExit(.{});
-        } else if (options.useStdin and options.inputFiles.items.len > 0) {
-            try ExitCode.stdinOrFileError.printErrorAndExit(.{});
-        }
     }
 
-    fn getSeparator(args: [][]u8, index: usize, arg: []const u8) ![1]u8 {
+    fn getSeparator(args: [][]const u8, index: usize, arg: []const u8) ![1]u8 {
         const sep = try argumentValue(args, index, arg);
         skipNext();
         switch (std.meta.stringToEnum(Separator, sep) orelse {
@@ -225,7 +226,7 @@ pub const Parser = struct {
         }
     }
 
-    fn getQuoute(args: [][]u8, index: usize, arg: []const u8) !?[1]u8 {
+    fn getQuoute(args: [][]const u8, index: usize, arg: []const u8) !?[1]u8 {
         const quoute = try argumentValue(args, index, arg);
         skipNext();
         switch (std.meta.stringToEnum(Quoute, quoute) orelse {
@@ -241,7 +242,7 @@ pub const Parser = struct {
         skip_next = true;
     }
 
-    fn argumentValue(args: [][]u8, index: usize, argument: []const u8) ![]u8 {
+    fn argumentValue(args: [][]const u8, index: usize, argument: []const u8) ![]const u8 {
         const pos = index + 1;
         if (pos >= args.len) {
             try ExitCode.argumentValueMissingError.printErrorAndExit(.{argument});
@@ -258,5 +259,13 @@ pub const Parser = struct {
     fn printVersion() !void {
         const license = @embedFile("LICENSE.txt");
         try std.io.getStdOut().writeAll(version ++ license);
+    }
+
+    pub fn checkInputFileGiven(options: *Options) !void {
+        if (!options.useStdin and options.inputFiles.items.len == 0) {
+            try ExitCode.noInputError.printErrorAndExit(.{});
+        } else if (options.useStdin and options.inputFiles.items.len > 0) {
+            try ExitCode.stdinOrFileError.printErrorAndExit(.{});
+        }
     }
 };
