@@ -39,6 +39,8 @@ const Argument = enum {
     @"--inputLimit",
     @"--outputLimit",
     @"--lengths",
+    @"--extraLF",
+    @"--extraCRLF",
 };
 
 const Separator = enum {
@@ -195,6 +197,8 @@ pub const Parser = struct {
                         try options.setLenghts(try argumentValue(args, index, arg));
                         skipNext();
                     },
+                    .@"--extraLF" => options.extraLineEnd = 1,
+                    .@"--extraCRLF" => options.extraLineEnd = 2,
                 }
             } else {
                 try options.inputFiles.append(arg);

@@ -26,7 +26,12 @@ Options:
          --skipLines list       skip lines numbers in list
                                 indices as 0-based, header has zero index
          --inputLimit  lim      limit the input processing to lim lines
+         --lengths [1,2,3]      comma separated list of field lengths
+                                processes input as fixed filed (record) length
 
+         --extraLF              with --lengths to read an extra end of line
+         --extraCRLF            with --lengths to read 2 extra EOL characters
+         
   output formats:
      --format csv               csv file for format options see output section
      --format lazyMarkdown      compact markdown table format 

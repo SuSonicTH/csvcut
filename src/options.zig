@@ -57,6 +57,7 @@ pub const Options = struct {
     inputLimit: usize = 0,
     outputLimit: usize = 0,
     lengths: ?std.ArrayList(usize) = null,
+    extraLineEnd: u2 = 0,
 
     pub fn init(allocator: std.mem.Allocator) !Options {
         return .{

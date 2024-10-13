@@ -35,18 +35,18 @@ pub fn initCsvReader(reader: std.io.AnyReader, inputLimit: usize, skipLine: ?std
     };
 }
 
-pub fn initWidthFile(file: *std.fs.File, widhts: []usize, trim: bool, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), allocator: std.mem.Allocator) !Self {
+pub fn initWidthFile(file: *std.fs.File, widhts: []usize, trim: bool, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), extraLineEnd: u2, allocator: std.mem.Allocator) !Self {
     return .{
-        .readerImpl = try ReaderImpl.initWidthFile(file, widhts, trim, allocator),
+        .readerImpl = try ReaderImpl.initWidthFile(file, widhts, trim, extraLineEnd, allocator),
         .allocator = allocator,
         .inputLimit = inputLimit,
         .skipLine = skipLine,
     };
 }
 
-pub fn initWidthReader(reader: std.io.AnyReader, widhts: []usize, trim: bool, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), allocator: std.mem.Allocator) !Self {
+pub fn initWidthReader(reader: std.io.AnyReader, widhts: []usize, trim: bool, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), extraLineEnd: u2, allocator: std.mem.Allocator) !Self {
     return .{
-        .readerImpl = try ReaderImpl.initWidthReader(reader, widhts, trim, allocator),
+        .readerImpl = try ReaderImpl.initWidthReader(reader, widhts, trim, extraLineEnd, allocator),
         .allocator = allocator,
         .inputLimit = inputLimit,
         .skipLine = skipLine,
@@ -171,15 +171,15 @@ const ReaderImpl = union(enum) {
         };
     }
 
-    fn initWidthFile(file: *std.fs.File, widhts: []usize, trim: bool, allocator: std.mem.Allocator) !ReaderImpl {
+    fn initWidthFile(file: *std.fs.File, widhts: []usize, trim: bool, extraLineEnd: u2, allocator: std.mem.Allocator) !ReaderImpl {
         return .{
-            .widthFile = try WidthFileReader.init(file, widhts, trim, allocator),
+            .widthFile = try WidthFileReader.init(file, widhts, trim, extraLineEnd, allocator),
         };
     }
 
-    fn initWidthReader(reader: std.io.AnyReader, widhts: []usize, trim: bool, allocator: std.mem.Allocator) !ReaderImpl {
+    fn initWidthReader(reader: std.io.AnyReader, widhts: []usize, trim: bool, extraLineEnd: u2, allocator: std.mem.Allocator) !ReaderImpl {
         return .{
-            .widthReader = try WidthReader.init(reader, widhts, trim, allocator),
+            .widthReader = try WidthReader.init(reader, widhts, trim, extraLineEnd, allocator),
         };
     }
 
@@ -301,12 +301,14 @@ const WidthFileReader = struct {
     recordSize: usize = 0,
     fields: ?[][]const u8 = undefined,
     pos: usize = 0,
+    extraLineEnd: u2,
 
-    fn init(file: *std.fs.File, widhts: []usize, trim: bool, allocator: std.mem.Allocator) !WidthFileReader {
+    fn init(file: *std.fs.File, widhts: []usize, trim: bool, extraLineEnd: u2, allocator: std.mem.Allocator) !WidthFileReader {
         var reader: WidthFileReader = .{
             .allocator = allocator,
             .memMapper = try MemMapper.init(file.*, false),
             .trim = trim,
+            .extraLineEnd = extraLineEnd,
         };
         errdefer reader.deinit();
         reader.data = try reader.memMapper.map(u8, .{});
@@ -337,7 +339,7 @@ const WidthFileReader = struct {
     inline fn readLine(self: *WidthFileReader) !?[]const u8 {
         if (self.pos + self.recordSize <= self.data.len) {
             const current = self.pos;
-            self.pos += self.recordSize;
+            self.pos += self.recordSize + self.extraLineEnd;
             return self.data[current .. current + self.recordSize];
         }
         return null;
@@ -368,17 +370,19 @@ const WidthReader = struct {
     data: ?[]u8 = null,
     pos: usize = 0,
     end: usize = 0,
+    extraLineEnd: u2,
 
-    fn init(anyReader: std.io.AnyReader, widhts: []usize, trim: bool, allocator: std.mem.Allocator) !WidthReader {
+    fn init(anyReader: std.io.AnyReader, widhts: []usize, trim: bool, extraLineEnd: u2, allocator: std.mem.Allocator) !WidthReader {
         var reader: WidthReader = .{
             .allocator = allocator,
             .reader = anyReader,
             .trim = trim,
             .fields = try allocator.alloc([]u8, widhts.len),
+            .extraLineEnd = extraLineEnd,
         };
         errdefer reader.deinit();
         reader.fieldProperties = try calculateFieldProperties(widhts, &reader.recordSize, allocator);
-        reader.data = try allocator.alloc(u8, reader.recordSize * 100);
+        reader.data = try allocator.alloc(u8, (reader.recordSize + extraLineEnd) * 100);
         _ = try reader.fillBuffer();
         return reader;
     }
@@ -415,7 +419,7 @@ const WidthReader = struct {
             }
         }
         const current = self.pos;
-        self.pos += self.recordSize;
+        self.pos += self.recordSize + self.extraLineEnd;
         return self.data.?[current .. current + self.recordSize];
     }
 

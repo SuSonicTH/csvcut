@@ -40,7 +40,7 @@ pub fn main() !void {
             else => {},
         }
         if (options.lengths) |lengths| {
-            var fieldReader: FieldReader = try FieldReader.initWidthReader(std.io.getStdIn().reader().any(), lengths.items, options.trim, options.inputLimit, options.skipLine, allocator);
+            var fieldReader: FieldReader = try FieldReader.initWidthReader(std.io.getStdIn().reader().any(), lengths.items, options.trim, options.inputLimit, options.skipLine, options.extraLineEnd, allocator);
             try proccessFile(&fieldReader, std.io.getStdOut());
         } else {
             var fieldReader: FieldReader = try FieldReader.initCsvReader(std.io.getStdIn().reader().any(), options.inputLimit, options.skipLine, .{ .separator = options.inputSeparator[0], .trim = options.trim, .quoute = if (options.inputQuoute) |quote| quote[0] else null }, allocator);
@@ -66,7 +66,7 @@ fn processFileByName(fileName: []const u8) !void {
     defer file.close();
 
     if (options.lengths) |lengths| {
-        var fieldReader: FieldReader = try FieldReader.initWidthFile(&file, lengths.items, options.trim, options.inputLimit, options.skipLine, allocator);
+        var fieldReader: FieldReader = try FieldReader.initWidthFile(&file, lengths.items, options.trim, options.inputLimit, options.skipLine, options.extraLineEnd, allocator);
         try proccessFile(&fieldReader, std.io.getStdOut());
     } else {
         var fieldReader: FieldReader = try FieldReader.initCsvFile(&file, options.inputLimit, options.skipLine, .{ .separator = options.inputSeparator[0], .trim = options.trim, .quoute = if (options.inputQuoute) |quote| quote[0] else null }, allocator);
