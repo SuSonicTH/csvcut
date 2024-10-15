@@ -18,3 +18,4 @@
 ### speed
 
 ### cleanup
+* add argument check after parsing all the arguments and error if arguments are used together that make no sense
