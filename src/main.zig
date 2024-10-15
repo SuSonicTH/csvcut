@@ -7,6 +7,7 @@ const Utf8Output = @import("Utf8Output.zig");
 const FieldReader = @import("FieldReader.zig");
 const FormatWriter = @import("FormatWriter.zig").FormatWriter;
 const FieldWidths = @import("FieldWidths.zig");
+const config = @import("config.zig");
 
 var allocator: std.mem.Allocator = undefined;
 var options: Options = undefined;
@@ -27,6 +28,9 @@ pub fn main() !void {
     options = try Options.init(allocator);
     defer options.deinit();
 
+    if (config.readConfigFromFile("default.config", allocator) catch null) |defaultArguments| {
+        try ArgumentParser.parse(&options, defaultArguments.items, allocator);
+    }
     try ArgumentParser.parse(&options, args, allocator);
     try ArgumentParser.checkInputFileGiven(&options);
 

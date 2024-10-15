@@ -1,7 +1,6 @@
 # csvcut todos
 
 ## additional features
-* check if ~/.config/csvcut/default.config exists and use it
 * diff 2 csv files
 * paged output
 * option to filter the last x lines (trailer), maybe as part of index filter with negative sign (i.e. --filterLine -1,-2 filters last 2 lines)

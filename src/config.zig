@@ -10,9 +10,16 @@ const State = enum {
 };
 
 pub fn readConfigFromFile(name: []const u8, allocator: std.mem.Allocator) !std.ArrayList([]const u8) {
-    const file = try getConfigFile(name, allocator);
+    const file = std.fs.cwd().openFile(name, .{}) catch blk: {
+        if (name[0] == '/' or name[0] == '\\') {
+            return error.FileNotFound;
+        }
+
+        break :blk try getConfigFileFromHome(name, allocator);
+    };
     defer file.close();
-    var config = try file.readToEndAlloc(allocator, 1024 * 1024 * 10);
+
+    var config = try file.readToEndAlloc(allocator, 1024 * 1024);
 
     var arguments = try std.ArrayList([]const u8).initCapacity(allocator, 10);
     try arguments.append(name);
@@ -160,27 +167,22 @@ inline fn moveToLeft(config: []u8, pos: usize, comptime move: u2) !void {
     }
 }
 
-fn getConfigFile(name: []const u8, allocator: std.mem.Allocator) !std.fs.File {
-    return std.fs.cwd().openFile(name, .{}) catch {
-        if (name[0] == '/' or name[0] == '\\') {
-            return error.FileNotFound;
-        }
-        var envMap = try std.process.getEnvMap(allocator);
-        defer envMap.deinit();
+fn getConfigFileFromHome(name: []const u8, allocator: std.mem.Allocator) !std.fs.File {
+    var envMap = try std.process.getEnvMap(allocator);
+    defer envMap.deinit();
 
-        if (envMap.get("CSVCUT_CONFIG")) |config| {
-            return openConfigFile(config, "", "", name, allocator);
-        } else if (envMap.get("HOME")) |home| {
-            return openConfigFile(home, ".config/csvcut/", "", name, allocator);
-        } else if (builtin.os.tag == .windows) {
-            if (envMap.get("homedrive")) |homedrive| {
-                if (envMap.get("homepath")) |homepath| {
-                    return openConfigFile(homedrive, homepath, ".config/csvcut/", name, allocator);
-                }
+    if (envMap.get("CSVCUT_CONFIG")) |config| {
+        return openConfigFile(config, "", "", name, allocator);
+    } else if (envMap.get("HOME")) |home| {
+        return openConfigFile(home, ".config/csvcut/", "", name, allocator);
+    } else if (builtin.os.tag == .windows) {
+        if (envMap.get("homedrive")) |homedrive| {
+            if (envMap.get("homepath")) |homepath| {
+                return openConfigFile(homedrive, homepath, ".config/csvcut/", name, allocator);
             }
         }
-        return error.FileNotFound;
-    };
+    }
+    return error.FileNotFound;
 }
 
 fn openConfigFile(home: []const u8, sub1: []const u8, sub2: []const u8, name: []const u8, allocator: std.mem.Allocator) !std.fs.File {
