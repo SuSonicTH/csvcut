@@ -209,21 +209,24 @@ const ReaderImpl = union(enum) {
 };
 
 const CsvFileReader = struct {
-    lineReader: *LineReader,
-    csvLine: CsvLine.CsvLine,
+    lineReader: LineReader,
+    csvLine: ?CsvLine.CsvLine = null,
 
     fn init(file: *std.fs.File, csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !CsvFileReader {
-        var reader = try LineReader.initFile(file, allocator, .{});
-        errdefer reader.deinit();
-
-        return .{
-            .lineReader = &reader,
-            .csvLine = try CsvLine.CsvLine.init(allocator, csvLineOptions),
+        var ret: CsvFileReader = .{
+            .lineReader = try LineReader.initFile(file, allocator, .{}),
         };
+
+        errdefer ret.lineReader.deinit();
+        ret.csvLine = try CsvLine.CsvLine.init(allocator, csvLineOptions);
+        return ret;
     }
 
     fn deinit(self: *CsvFileReader) void {
-        self.csvLine.free();
+        self.lineReader.deinit();
+        if (self.csvLine) |csvLine| {
+            csvLine.free();
+        }
     }
 
     fn reset(self: *CsvFileReader) !void {
@@ -231,12 +234,12 @@ const CsvFileReader = struct {
     }
 
     fn skipLine(self: *CsvFileReader) !void {
-        _ = try self.lineReader.*.readLine();
+        _ = try self.lineReader.readLine();
     }
 
     fn getFields(self: *CsvFileReader) !?[][]const u8 {
-        if (try self.lineReader.*.readLine()) |line| {
-            return try self.csvLine.parse(line);
+        if (try self.lineReader.readLine()) |line| {
+            return try self.csvLine.?.parse(line);
         }
         return null;
     }

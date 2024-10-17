@@ -12,7 +12,6 @@
 
 ## fixes
 * --count causes segfault with aligned outputs
-* debug build segfaults in LineReader.zig readLine, release is working
 
 ### speed
 
