@@ -11,8 +11,8 @@
   * excel
 
 ## fixes
-* figure out why stdin processing is much slower then file processing in gitbash (ok in cmd, faster in WSL on ext4)
 * --count causes segfault with aligned outputs
+* debug build segfaults in LineReader.zig readLine, release is working
 
 ### speed
 
