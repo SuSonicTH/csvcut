@@ -35,6 +35,7 @@ pub fn deinit(self: *Self) void {
 fn collectWidths(fieldReader: *FieldReader, header: ?[][]const u8, allocator: std.mem.Allocator, outputFormat: OutputFormat) ![]usize {
     var fieldWidths: []usize = undefined;
     if (header) |head| {
+        _ = try std.io.getStdOut().writer().print("head len:{d}\n", .{head.len});
         fieldWidths = try allocator.alloc(usize, head.len);
         @memset(fieldWidths, 0);
         updateFieldWidths(outputFormat, head, fieldWidths);

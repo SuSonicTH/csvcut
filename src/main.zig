@@ -93,9 +93,13 @@ const Fields = struct {
         return self;
     }
 
-    pub fn get(self: *const Fields) !*const [][]const u8 {
+    pub fn get(self: *const Fields) ![][]const u8 {
         self.fields[self.fields.len - 1] = try std.fmt.allocPrint(allocator, "{d}", .{self.count});
-        return &self.fields;
+        return self.fields;
+    }
+
+    pub fn getFields(self: *const Fields) ![][]const u8 {
+        return self.fields[0..self.fields.len];
     }
 };
 
@@ -171,10 +175,13 @@ const OutputWriter = struct {
         if (!initialized) {
             formatWriter = try FormatWriter.init(options, allocator, fieldWidths);
             lineBuffer = try std.ArrayList(u8).initCapacity(allocator, 1024);
-            try formatWriter.start(&writer);
             initialized = true;
         }
         outputWriter = writer;
+    }
+
+    fn start() !void {
+        try formatWriter.start(&outputWriter);
     }
 
     fn end() !void {
@@ -237,24 +244,24 @@ fn proccessFile(fieldReader: *FieldReader, outputFile: std.fs.File) !void {
         fieldReader.setFilterFields(options.filterFields);
     }
 
-    var fieldWidths = try FieldWidths.init(options.outputFormat, options.fileHeader, options.header, fieldReader, allocator);
+    const selectedHeader = try getSelectedHeader(fieldReader);
+    for (selectedHeader.?, 0..) |hdr, i| {
+        _ = try std.io.getStdErr().writer().print("{d}:{s}\n", .{ i, hdr });
+    }
+
+    var fieldWidths = try FieldWidths.init(options.outputFormat, options.fileHeader, selectedHeader, fieldReader, allocator);
     defer fieldWidths.deinit();
 
     var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
     try OutputWriter.init(bufferedWriter.writer().any(), fieldWidths);
     defer OutputWriter.deinit();
 
-    if (options.header != null and options.outputHeader) {
-        if (options.count) {
-            const selectedHeader = &(try fieldReader.getSelectedFields(options.header.?)).?;
-            const header = try (try Fields.init(selectedHeader)).get();
-            header.*[header.*.len - 1] = "Count";
-            try OutputWriter.writeDirect(header, true);
-        } else {
-            try OutputWriter.writeDirect(&(try fieldReader.getSelectedFields(options.header.?)).?, true);
-        }
+    if (!options.count) {
+    if (selectedHeader!=null and options.outputHeader )  {
+        try OutputWriter.writeDirect(&selectedHeader.?, true);
     }
-
+    OutputWriter.start();
+}
     var linesWritten: usize = 0;
     while (try fieldReader.readLine()) |fields| {
         if (options.unique) {
@@ -276,9 +283,14 @@ fn proccessFile(fieldReader: *FieldReader, outputFile: std.fs.File) !void {
     }
 
     if (options.count) { //todo: need to update FieldWidths for the count column, currenlt y--count with --format table segfaults
+        FieldWidths.updateCount()
+        if (selectedHeader!=null and options.outputHeader)  {
+            try OutputWriter.writeDirect(&selectedHeader.?, true);
+        }
+
         var iterator = CountAggregator.countMap.iterator();
         while (iterator.next()) |entry| {
-            try OutputWriter.writeDirect(try entry.value_ptr.get(), false);
+            try OutputWriter.writeDirect(&(try entry.value_ptr.get()), false);
             linesWritten += 1;
             if (options.outputLimit != 0 and linesWritten >= options.outputLimit) {
                 break;
@@ -288,6 +300,25 @@ fn proccessFile(fieldReader: *FieldReader, outputFile: std.fs.File) !void {
 
     try OutputWriter.end();
     try bufferedWriter.flush();
+}
+
+fn getSelectedHeader(fieldReader: *FieldReader) !?[][]const u8 {
+    if (options.header != null) {
+        if (options.count) {
+            const selectedHeader = &(try fieldReader.getSelectedFields(options.header.?)).?;
+            const header = try (try Fields.init(selectedHeader)).getFields();
+            header[header.len - 1] = "Count";
+            return header;
+        } else {
+            const selectedHeader = &(try fieldReader.getSelectedFields(options.header.?)).?;
+            const fields = try allocator.alloc([]u8, (selectedHeader.len));
+            for (selectedHeader.*, 0..) |field, i| {
+                fields[i] = try allocator.dupe(u8, field);
+            }
+            return fields;
+        }
+    }
+    return null;
 }
 
 fn listHeader(fieldReader: *FieldReader) !void {

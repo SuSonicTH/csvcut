@@ -45,6 +45,7 @@ pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const 
 
 pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
     for (fields.*, 0..) |field, i| {
+        _ = try std.io.getStdOut().writer().print("{d},{d}\n", .{ self.fieldWidths.widths[i], field.len });
         const len = self.fieldWidths.widths[i] - field.len;
         _ = try writer.write("│");
         _ = try writer.write(field);
@@ -54,6 +55,7 @@ pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const []
 }
 
 pub fn end(self: *Self, writer: *const std.io.AnyWriter) !void {
+    _ = try std.io.getStdErr().writer().print("LEN:{d}\n", .{self.fieldWidths.widths.len});
     try self.writeTableLine(writer, self.fieldWidths.widths.len, "└", "┴", "┘\n");
     self.allocator.free(self.spaces);
     self.allocator.free(self.lineDashes);
