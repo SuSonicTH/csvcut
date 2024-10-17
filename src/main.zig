@@ -257,11 +257,12 @@ fn proccessFile(fieldReader: *FieldReader, outputFile: std.fs.File) !void {
     defer OutputWriter.deinit();
 
     if (!options.count) {
-    if (selectedHeader!=null and options.outputHeader )  {
-        try OutputWriter.writeDirect(&selectedHeader.?, true);
+        if (selectedHeader!=null and options.outputHeader )  {
+            try OutputWriter.writeDirect(&selectedHeader.?, true);
+        }
+        OutputWriter.start();
     }
-    OutputWriter.start();
-}
+
     var linesWritten: usize = 0;
     while (try fieldReader.readLine()) |fields| {
         if (options.unique) {
@@ -283,7 +284,8 @@ fn proccessFile(fieldReader: *FieldReader, outputFile: std.fs.File) !void {
     }
 
     if (options.count) { //todo: need to update FieldWidths for the count column, currenlt y--count with --format table segfaults
-        FieldWidths.updateCount()
+        FieldWidths.updateCount();
+        OutputWriter.start();
         if (selectedHeader!=null and options.outputHeader)  {
             try OutputWriter.writeDirect(&selectedHeader.?, true);
         }

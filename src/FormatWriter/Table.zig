@@ -45,7 +45,6 @@ pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const 
 
 pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
     for (fields.*, 0..) |field, i| {
-        _ = try std.io.getStdOut().writer().print("{d},{d}\n", .{ self.fieldWidths.widths[i], field.len });
         const len = self.fieldWidths.widths[i] - field.len;
         _ = try writer.write("│");
         _ = try writer.write(field);
