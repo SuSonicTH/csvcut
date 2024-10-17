@@ -9,6 +9,7 @@
   * table output with alternating BG color every 2nd row
   * xml
   * excel
+* make runtime and memusage printing depend on --verbose argument
 
 ## fixes
 * --count causes segfault with aligned outputs
