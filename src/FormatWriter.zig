@@ -13,6 +13,7 @@ const Html = @import("FormatWriter/Html.zig");
 const HtmlHandson = @import("FormatWriter/HtmlHandson.zig");
 const Json = @import("FormatWriter/Json.zig");
 const JsonArray = @import("FormatWriter/JsonArray.zig");
+const ExcelXml = @import("FormatWriter/ExcelXml.zig");
 
 pub const FormatWriter = union(OutputFormat) {
     csv: CsvWriter,
@@ -25,6 +26,7 @@ pub const FormatWriter = union(OutputFormat) {
     htmlHandson: HtmlHandson,
     json: Json,
     jsonArray: JsonArray,
+    excelXml: ExcelXml,
 
     pub fn init(options: Options, allocator: std.mem.Allocator, fieldWidths: FieldWidths) !FormatWriter {
         return switch (options.outputFormat) {
@@ -38,6 +40,7 @@ pub const FormatWriter = union(OutputFormat) {
             .htmlHandson => .{ .htmlHandson = try HtmlHandson.init() },
             .json => .{ .json = try Json.init(allocator) },
             .jsonArray => .{ .jsonArray = try JsonArray.init() },
+            .excelXml => .{ .excelXml = try ExcelXml.init(allocator) },
         };
     }
 

@@ -18,6 +18,7 @@ pub const OutputFormat = enum {
     htmlHandson,
     json,
     jsonArray,
+    excelXml,
 };
 
 const Selection = union(enum) {
