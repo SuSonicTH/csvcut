@@ -282,7 +282,7 @@ fn proccessFileCount(fieldReader: *FieldReader, outputFile: std.fs.File, outputH
         try countAggregator.add(&fields);
     }
 
-    var fieldWidths = try FieldWidths.initCountAggregated(options.outputFormat, outputHeader, &countAggregator.countMap, allocator);
+    var fieldWidths = try FieldWidths.initCountAggregated(options.outputFormat, outputHeader, &countAggregator, allocator);
     defer fieldWidths.deinit();
 
     var bufferedWriter = std.io.bufferedWriter(outputFile.writer());

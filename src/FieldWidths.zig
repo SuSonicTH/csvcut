@@ -4,6 +4,7 @@ const OutputFormat = @import("options.zig").OutputFormat;
 const FieldReader = @import("FieldReader.zig");
 const escape = @import("FormatWriter/escape.zig");
 const Fields = @import("Aggregate.zig").Fields;
+const CountAggregator = @import("Aggregate.zig").CountAggregator;
 
 const Self = @This();
 
@@ -27,10 +28,10 @@ pub fn init(outputFormat: OutputFormat, fileHeader: bool, header: ?[][]const u8,
     }
 }
 
-pub fn initCountAggregated(outputFormat: OutputFormat, outputHeader: ?std.ArrayList([]const u8), countMap: *std.StringHashMap(Fields), allocator: std.mem.Allocator) !Self {
+pub fn initCountAggregated(outputFormat: OutputFormat, outputHeader: ?std.ArrayList([]const u8), countAggregator: *CountAggregator, allocator: std.mem.Allocator) !Self {
     switch (outputFormat) {
         .markdown, .jira, .table => {
-            const widths = try collectCountWidths(outputHeader, countMap, allocator, outputFormat);
+            const widths = try collectCountWidths(outputHeader, countAggregator, allocator, outputFormat);
             return .{
                 .allocator = allocator,
                 .widths = widths,
@@ -64,9 +65,9 @@ fn collectWidths(fieldReader: *FieldReader, header: ?[][]const u8, allocator: st
     return fieldWidths;
 }
 
-fn collectCountWidths(outputHeader: ?std.ArrayList([]const u8), countMap: *std.StringHashMap(Fields), allocator: std.mem.Allocator, outputFormat: OutputFormat) ![]usize {
+fn collectCountWidths(outputHeader: ?std.ArrayList([]const u8), countAggregator: *CountAggregator, allocator: std.mem.Allocator, outputFormat: OutputFormat) ![]usize {
     var fieldWidths: []usize = undefined;
-    var iterator = countMap.iterator();
+    var iterator = countAggregator.countMap.iterator();
 
     if (outputHeader) |header| {
         fieldWidths = try allocator.alloc(usize, header.items.len);
