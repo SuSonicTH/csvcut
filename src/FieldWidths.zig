@@ -3,6 +3,7 @@ const CsvLine = @import("CsvLine").CsvLine;
 const OutputFormat = @import("options.zig").OutputFormat;
 const FieldReader = @import("FieldReader.zig");
 const escape = @import("FormatWriter/escape.zig");
+const Fields = @import("Aggregate.zig").Fields;
 
 const Self = @This();
 
@@ -16,6 +17,20 @@ pub fn init(outputFormat: OutputFormat, fileHeader: bool, header: ?[][]const u8,
             const widths = try collectWidths(fieldReader, header, allocator, outputFormat);
             try resetReader(fieldReader, fileHeader);
 
+            return .{
+                .allocator = allocator,
+                .widths = widths,
+                .maxSpace = calculateMaxSpace(widths),
+            };
+        },
+        else => return .{},
+    }
+}
+
+pub fn initCountAggregated(outputFormat: OutputFormat, outputHeader: ?std.ArrayList([]const u8), countMap: *std.StringHashMap(Fields), allocator: std.mem.Allocator) !Self {
+    switch (outputFormat) {
+        .markdown, .jira, .table => {
+            const widths = try collectCountWidths(outputHeader, countMap, allocator, outputFormat);
             return .{
                 .allocator = allocator,
                 .widths = widths,
@@ -45,6 +60,30 @@ fn collectWidths(fieldReader: *FieldReader, header: ?[][]const u8, allocator: st
     }
     while (try fieldReader.readLine()) |fields| {
         updateFieldWidths(outputFormat, fields, fieldWidths);
+    }
+    return fieldWidths;
+}
+
+fn collectCountWidths(outputHeader: ?std.ArrayList([]const u8), countMap: *std.StringHashMap(Fields), allocator: std.mem.Allocator, outputFormat: OutputFormat) ![]usize {
+    var fieldWidths: []usize = undefined;
+    var iterator = countMap.iterator();
+
+    if (outputHeader) |header| {
+        fieldWidths = try allocator.alloc(usize, header.items.len);
+        @memset(fieldWidths, 0);
+        updateFieldWidths(outputFormat, header.items, fieldWidths);
+    } else if (iterator.next()) |entry| {
+        const fields = try entry.value_ptr.get();
+        fieldWidths = try allocator.alloc(usize, fields.*.len);
+        @memset(fieldWidths, 0);
+        updateFieldWidths(outputFormat, fields.*, fieldWidths);
+    } else {
+        return error.NoData;
+    }
+
+    while (iterator.next()) |entry| {
+        const fields = try entry.value_ptr.get();
+        updateFieldWidths(outputFormat, fields.*, fieldWidths);
     }
     return fieldWidths;
 }
