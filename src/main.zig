@@ -13,7 +13,7 @@ const Aggregate = @import("Aggregate.zig");
 const Fields = Aggregate.Fields;
 const CountAggregator = Aggregate.CountAggregator;
 const UniqueAgregator = Aggregate.UniqueAgregator;
-const ExitCode = @import("ExitCode.zig").ExitCode;
+const ExitCode = @import("exitCode.zig").ExitCode;
 
 var allocator: std.mem.Allocator = undefined;
 var options: Options = undefined;

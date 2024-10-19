@@ -2,8 +2,8 @@ const std = @import("std");
 const Options = @import("options.zig").Options;
 const OutputFormat = @import("options.zig").OutputFormat;
 const readConfigFromFile = @import("config.zig").readConfigFromFile;
-const ExitCode = @import("ExitCode.zig").ExitCode;
-const version = @import("ExitCode.zig").version;
+const ExitCode = @import("exitCode.zig").ExitCode;
+const version = @import("exitCode.zig").version;
 
 const Argument = enum {
     @"--help",
