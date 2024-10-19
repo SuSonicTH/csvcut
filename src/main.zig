@@ -218,6 +218,10 @@ fn proccessFile(fieldReader: *FieldReader, outputFile: std.fs.File) !void {
         return;
     }
 
+    try proccessFileDirect(fieldReader, outputFile);
+}
+
+fn proccessFileDirect(fieldReader: *FieldReader, outputFile: std.fs.File) !void {
     UniqueAgregator.init();
     try CountAggregator.init();
 
@@ -298,4 +302,9 @@ fn listHeader(fieldReader: *FieldReader) !void {
             _ = try out.write("\n");
         }
     }
+}
+
+fn proccessFileAggregate(fieldReader: *FieldReader, outputFile: std.fs.File) !void {
+    _ = fieldReader;
+    _ = outputFile;
 }
