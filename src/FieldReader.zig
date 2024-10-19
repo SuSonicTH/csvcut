@@ -108,6 +108,10 @@ pub inline fn readLine(self: *Self) !?[][]const u8 {
     }
 }
 
+pub inline fn skipOneLine(self: *Self) !void {
+    _ = try self.readerImpl.getFields();
+}
+
 inline fn skipLines(self: *Self) !void {
     if (self.skipLine != null) {
         while (self.skipLine.?.get(self.lineNumber) != null) {

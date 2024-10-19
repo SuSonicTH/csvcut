@@ -182,7 +182,7 @@ fn getConfigFileFromHome(name: []const u8, allocator: std.mem.Allocator) !std.fs
             }
         }
     }
-    return error.FileNotFound;
+    return error.ReadingConfig;
 }
 
 fn openConfigFile(home: []const u8, sub1: []const u8, sub2: []const u8, name: []const u8, allocator: std.mem.Allocator) !std.fs.File {

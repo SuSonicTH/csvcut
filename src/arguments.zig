@@ -2,8 +2,8 @@ const std = @import("std");
 const Options = @import("options.zig").Options;
 const OutputFormat = @import("options.zig").OutputFormat;
 const readConfigFromFile = @import("config.zig").readConfigFromFile;
-
-const version = "csvcut v0.1\n\n";
+const ExitCode = @import("ExitCode.zig").ExitCode;
+const version = @import("ExitCode.zig").version;
 
 const Argument = enum {
     @"--help",
@@ -64,59 +64,6 @@ const Quoute = enum {
     @"\"",
 };
 
-const ExitCode = enum(u8) {
-    OK,
-    noArgumentError,
-    noInputError,
-    stdinOrFileError,
-    unknownArgumentError,
-    argumentWithUnknownValueError,
-    argumentValueMissingError,
-    includeAndExcludeTogether,
-
-    const useStdinMessage = "\nuse --stdin if you want to process standard input";
-
-    pub fn code(self: ExitCode) u8 {
-        return @intFromEnum(self);
-    }
-
-    pub fn message(self: ExitCode) []const u8 {
-        switch (self) {
-            .OK => return "",
-            .noArgumentError => return "no argument given, expecting at least one argument" ++ useStdinMessage,
-            .noInputError => return "no input file given" ++ useStdinMessage,
-            .stdinOrFileError => return "use either --stdin or input file(s) not both" ++ useStdinMessage,
-            .unknownArgumentError => return "argument '{s}' is unknown",
-            .argumentWithUnknownValueError => return "argument '{s}' got unknown value '{s}'",
-            .argumentValueMissingError => return "value for argument '{s}' is missing",
-            .includeAndExcludeTogether => return "--include and --exclude cannot be used together",
-        }
-    }
-
-    pub fn exit(self: ExitCode) !noreturn {
-        std.process.exit(self.code());
-    }
-
-    fn printExitCodes() !void {
-        const writer = std.io.getStdOut().writer();
-        _ = try writer.write(version);
-        _ = try writer.write("Exit Codes:\n");
-
-        inline for (std.meta.fields(ExitCode)) |exitCode| {
-            try std.fmt.format(writer, "{d}: {s}\n", .{ exitCode.value, exitCode.name });
-        }
-        try ExitCode.OK.exit();
-    }
-
-    fn printErrorAndExit(comptime self: ExitCode, values: anytype) !noreturn {
-        const stdErr = std.io.getStdErr();
-        try stdErr.writeAll(version);
-        std.log.err(self.message(), values);
-        try stdErr.writeAll("\nuse csvcut --help for argument documentation\n");
-        try self.exit();
-    }
-};
-
 pub const Parser = struct {
     var skip_next: bool = false;
 
@@ -142,8 +89,14 @@ pub const Parser = struct {
                     .@"-Q", .@"--outputQuoute" => options.outputQuoute = try getQuoute(args, index, arg),
                     .@"--trim" => options.trim = true,
                     .@"-l", .@"--listHeader" => options.listHeader = true,
-                    .@"--unique" => options.unique = true,
-                    .@"--count" => options.count = true,
+                    .@"--unique" => {
+                        if (options.count) try ExitCode.countAndUniqueAreExclusive.printErrorAndExit(.{});
+                        options.unique = true;
+                    },
+                    .@"--count" => {
+                        if (options.unique) try ExitCode.countAndUniqueAreExclusive.printErrorAndExit(.{});
+                        options.count = true;
+                    },
                     .@"--format" => {
                         if (std.meta.stringToEnum(OutputFormat, try argumentValue(args, index, arg))) |outputFormat| {
                             options.outputFormat = outputFormat;
@@ -258,7 +211,13 @@ pub const Parser = struct {
 
     fn printVersion() !void {
         const license = @embedFile("LICENSE.txt");
-        try std.io.getStdOut().writeAll(version ++ license);
+        try std.io.getStdOut().writeAll(version ++ "\n\n" ++ license);
+        try ExitCode.exit(.OK);
+    }
+
+    pub fn validateArguments(options: *Options) !void {
+        try checkInputFileGiven(options);
+        if (options.lengths == null and (options.extraLineEnd > 0)) ExitCode.extraLfWithoutLength.printErrorAndExit(.{});
     }
 
     pub fn checkInputFileGiven(options: *Options) !void {

@@ -13,11 +13,19 @@ const Aggregate = @import("Aggregate.zig");
 const Fields = Aggregate.Fields;
 const CountAggregator = Aggregate.CountAggregator;
 const UniqueAgregator = Aggregate.UniqueAgregator;
+const ExitCode = @import("ExitCode.zig").ExitCode;
 
 var allocator: std.mem.Allocator = undefined;
 var options: Options = undefined;
 
 pub fn main() !void {
+    _main() catch |err| switch (err) {
+        error.OutOfMemory => ExitCode.outOfMemory.printErrorAndExit(.{}),
+        else => ExitCode.genericError.printErrorAndExit(.{err}),
+    };
+}
+
+fn _main() !void {
     var timer = try std.time.Timer.start();
     Utf8Output.init();
     defer Utf8Output.deinit();
@@ -37,7 +45,7 @@ pub fn main() !void {
         try ArgumentParser.parse(&options, defaultArguments.items, allocator);
     }
     try ArgumentParser.parse(&options, args, allocator);
-    try ArgumentParser.checkInputFileGiven(&options);
+    try ArgumentParser.validateArguments(&options);
 
     const stderr = std.io.getStdErr().writer();
 
@@ -79,7 +87,7 @@ pub fn main() !void {
 }
 
 fn processFileByName(fileName: []const u8) !void {
-    var file = try std.fs.cwd().openFile(fileName, .{});
+    var file = std.fs.cwd().openFile(fileName, .{}) catch |err| ExitCode.couldNotOpenInputFile.printErrorAndExit(.{ fileName, err });
     defer file.close();
 
     if (options.lengths) |lengths| {

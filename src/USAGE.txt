@@ -1,7 +1,7 @@
 Usage: csvcut [OPTION]... [FILE]...
 
-filter csv files by column name(s)
-With no FILE, or when FILE is -, read standard input.
+processes csv files or stdin and outputs in different tabular formats
+optionally does line filtering/limiting or selecting of columns
 
 Options:
      -h, --help               display this help and exit
@@ -14,7 +14,6 @@ Options:
                               then in $HOME/.config/csvcut
                               pauses argument processing an applies config
                               then continues to apply command line arguments
-
   input:
      -s, --separator sep        use sep as input field separator
          sep can be one of:
@@ -51,38 +50,37 @@ Options:
      --format jsonArray         json with an array of arrays
 
   output:
-     -S, --outputSeparator sep  use sep as input field separator
-         sep can be one of:
-            tab (\t)
-            comma (,) {Default}
-            semicolon (;)
-            pipe (|)
+     -S, --outputSeparator [sep]  use [sep] as input field separator
+                                  sep can be one of:
+                                    tab (\t)
+                                    comma (,) {Default}
+                                    semicolon (;)
+                                    pipe (|)
 
-     -q, --outputQuote  quo     quo is the quoting to use
-         quo can be one of:
-            no (default no quouting)
-            single (')
-            double (")
+     -Q, --quoteOutput no         no quouting {default for performance}
+     -Q, --quoteOutput single     use single quouttes (')
+     -Q, --quoteOutput double     use double quoutes (")
 
-     -N, --outputNoHeader      don't write header to output
+     -N, --outputNoHeader         don't write header to output
          
-         --outputLimit lim     limit the the number of lines outputted to lim
+         --outputLimit lim        limit the the number of lines outputted to lim
 
   processing:
-     -I, --include <1,2,3>     comma separated list of field names/indices 
+     -I, --include [1,2,3]     comma separated list of field names/indices 
                                use bashlash to escape numeric field names
                                can be used multiple times
                                cannot be used with --exclude
 
-     -E, --exclude <1,2,3>     comma separated list of field names/indices 
+     -E, --exclude [1,2,3]     comma separated list of field names/indices 
                                use bashlash to escape numeric field names
                                can be used multiple times
                                cannot be used with --include
 
-         --filter              list of filters that are applied
+         --filter [filter,..]  list of filters that are applied
                                argument field1=value1,field2=value2,....
 
          --trim                removes space & tab characters from start & end
          --unique              only output unique lines
                                check is applied after other processings
+
          --count               like --unique but adds a count column
