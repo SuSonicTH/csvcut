@@ -27,25 +27,24 @@ pub const Fields = struct {
 };
 
 pub const UniqueAgregator = struct {
-    var uniqueSet: ?std.StringHashMap(u1) = null;
-    var initialized = false;
-    var allocator: std.mem.Allocator = undefined;
+    uniqueSet: std.StringHashMap(u1),
+    allocator: std.mem.Allocator,
 
-    pub fn init(unique: bool, alloc: std.mem.Allocator) void {
-        if (unique) {
-            allocator = alloc;
-            if (!initialized) {
-                uniqueSet = std.StringHashMap(u1).init(allocator);
-                initialized = true;
-            } else {
-                uniqueSet.?.clearRetainingCapacity();
-            }
-        }
+    pub fn init(allocator: std.mem.Allocator) UniqueAgregator {
+        return .{
+            .allocator = allocator,
+            .uniqueSet = std.StringHashMap(u1).init(allocator),
+        };
     }
 
-    pub inline fn isNew(line: []u8) !bool {
-        if (!uniqueSet.?.contains(line)) {
-            try uniqueSet.?.put(try allocator.dupe(u8, line), 1);
+    pub fn deinit(self: *UniqueAgregator) void {
+        //todo: keys are not freed, use arena?
+        self.uniqueSet.deinit();
+    }
+
+    pub inline fn isNew(self: *UniqueAgregator, line: []u8) !bool {
+        if (!self.uniqueSet.contains(line)) {
+            try self.uniqueSet.put(try self.allocator.dupe(u8, line), 1);
             return true;
         }
         return false;
@@ -53,37 +52,32 @@ pub const UniqueAgregator = struct {
 };
 
 pub const CountAggregator = struct {
-    var allocator: std.mem.Allocator = undefined;
-    pub var countMap: std.StringHashMap(Fields) = undefined;
-    var keyBuffer: std.ArrayList(u8) = undefined;
-    var initialized = false;
+    allocator: std.mem.Allocator,
+    countMap: std.StringHashMap(Fields),
+    keyBuffer: std.ArrayList(u8),
 
-    pub fn init(alloc: std.mem.Allocator) !void {
-        if (!initialized) {
-            allocator = alloc;
-            countMap = std.StringHashMap(Fields).init(allocator);
-            keyBuffer = try std.ArrayList(u8).initCapacity(allocator, 1024);
-            initialized = true;
-        } else {
-            countMap.clearRetainingCapacity();
-            keyBuffer.clearRetainingCapacity();
-        }
+    pub fn init(allocator: std.mem.Allocator) !CountAggregator {
+        return .{
+            .allocator = allocator,
+            .countMap = std.StringHashMap(Fields).init(allocator),
+            .keyBuffer = try std.ArrayList(u8).initCapacity(allocator, 1024),
+        };
     }
 
-    pub fn add(fields: *const [][]const u8) !void {
-        if (countMap.getEntry(try getKey(fields))) |entry| {
+    pub fn add(self: *CountAggregator, fields: *const [][]const u8) !void {
+        if (self.countMap.getEntry(try self.getKey(fields))) |entry| {
             entry.value_ptr.*.count += 1;
         } else {
-            try countMap.put(try allocator.dupe(u8, keyBuffer.items), try Fields.init(fields, allocator));
+            try self.countMap.put(try self.allocator.dupe(u8, self.keyBuffer.items), try Fields.init(fields, self.allocator));
         }
     }
 
-    fn getKey(fields: *const [][]const u8) ![]u8 {
-        keyBuffer.clearRetainingCapacity();
+    fn getKey(self: *CountAggregator, fields: *const [][]const u8) ![]u8 {
+        self.keyBuffer.clearRetainingCapacity();
         for (fields.*) |field| {
-            try keyBuffer.appendSlice(field);
-            try keyBuffer.append('|');
+            try self.keyBuffer.appendSlice(field);
+            try self.keyBuffer.append('|');
         }
-        return keyBuffer.items;
+        return self.keyBuffer.items;
     }
 };
