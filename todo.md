@@ -10,5 +10,4 @@
 ### speed
 
 ### cleanup
-* add more argument checks after parsing all the arguments and error if arguments are used together that make no sense
-* catch errors in main and print nicer error messages
+
