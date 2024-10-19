@@ -34,9 +34,14 @@ pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const 
 pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
     _ = try writer.write("<Row>");
     for (fields.*) |field| {
-        _ = try writer.write("<Cell><Data ss:Type=\"String\">");
-        _ = try writer.write(field);
-        _ = try writer.write("</Data></Cell>");
+        _ = try writer.write("<Cell>");
+
+        const value = checkFormat(field);
+        switch (value.format) {
+            .integer => _ = try writer.print("<Data ss:Type=\"Number\">{d}</Data></Cell>", .{value.value.integer}),
+            .float => _ = try writer.print("<Data ss:Type=\"Number\">{d}</Data></Cell>", .{value.value.float}),
+            .string => _ = try writer.print("<Data ss:Type=\"String\">{s}</Data></Cell>", .{value.value.string}),
+        }
     }
     _ = try writer.write("</Row>\n");
 
@@ -54,6 +59,85 @@ pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const []
 
         try self.writeData(writer, &self.header);
     }
+}
+
+const NumberFormat = enum {
+    integer,
+    float,
+    string,
+};
+
+const NumberValue = union(NumberFormat) {
+    integer: i64,
+    float: f64,
+    string: []const u8,
+};
+
+const CheckedFormat = struct {
+    format: NumberFormat,
+    value: NumberValue,
+};
+
+var numberBuffer: [128]u8 = undefined;
+
+fn checkFormat(field: []const u8) CheckedFormat {
+    var isFloat = false;
+    var hasGrouping = false;
+
+    if (field.len == 0) return asString(field);
+
+    for (field) |char| {
+        if (std.mem.indexOfScalar(u8, "0123456789-,.Ee", char)) |pos| {
+            if (pos == 11) {
+                hasGrouping = true;
+            } else if (pos > 11) {
+                isFloat = true;
+            }
+        } else {
+            return asString(field);
+        }
+    }
+
+    const number = removeGrouping(hasGrouping, field);
+
+    if (isFloat) {
+        const value = std.fmt.parseFloat(f64, number) catch return asString(field);
+        return .{
+            .format = .float,
+            .value = .{ .float = value },
+        };
+    } else {
+        if (field[0] == '0') return asString(field);
+        const value = std.fmt.parseInt(i64, number, 10) catch return asString(field);
+        return .{
+            .format = .integer,
+            .value = .{ .integer = value },
+        };
+    }
+}
+
+fn asString(field: []const u8) CheckedFormat {
+    return .{
+        .format = .string,
+        .value = .{ .string = field },
+    };
+}
+
+fn removeGrouping(hasGrouping: bool, field: []const u8) []const u8 {
+    if (hasGrouping) {
+        var removed: u8 = 0;
+        var i: u8 = 0;
+        for (field) |d| {
+            if (d == ',') {
+                removed += 1;
+            } else {
+                numberBuffer[i - removed] = d;
+            }
+            i += 1;
+        }
+        return numberBuffer[0 .. i - 1];
+    }
+    return field;
 }
 
 pub fn end(self: *Self, writer: *const std.io.AnyWriter) !void {
