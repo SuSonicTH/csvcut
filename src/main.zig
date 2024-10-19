@@ -9,6 +9,11 @@ const FormatWriter = @import("FormatWriter.zig").FormatWriter;
 const FieldWidths = @import("FieldWidths.zig");
 const config = @import("config.zig");
 
+const Aggregate = @import("Aggregate.zig");
+const Fields = Aggregate.Fields;
+const CountAggregator = Aggregate.CountAggregator;
+const UniqueAgregator = Aggregate.UniqueAgregator;
+
 var allocator: std.mem.Allocator = undefined;
 var options: Options = undefined;
 
@@ -63,7 +68,14 @@ pub fn main() !void {
     } else {
         _ = try stderr.print("time needed: {d:0.2}ms\n", .{timeNeeded});
     }
-    _ = try stderr.print("memory used: {d}b\n", .{arena.queryCapacity()});
+    const memoryUsed = arena.queryCapacity();
+    if (memoryUsed > 5 * 1024 * 1024) {
+        _ = try stderr.print("memory used: {d}mb\n", .{arena.queryCapacity() / 1024 / 1024});
+    } else if (memoryUsed > 5 * 1024) {
+        _ = try stderr.print("memory used: {d}kb\n", .{arena.queryCapacity() / 1024});
+    } else {
+        _ = try stderr.print("memory used: {d}b\n", .{arena.queryCapacity()});
+    }
 }
 
 fn processFileByName(fileName: []const u8) !void {
@@ -78,86 +90,6 @@ fn processFileByName(fileName: []const u8) !void {
         try proccessFile(&fieldReader, std.io.getStdOut());
     }
 }
-
-const Fields = struct {
-    fields: [][]const u8,
-    count: usize,
-
-    pub fn init(fields: *const [][]const u8) !Fields {
-        var self: Fields = (try allocator.alloc(Fields, 1))[0];
-        self.count = 1;
-        self.fields = try allocator.alloc([]u8, fields.len + 1);
-        for (fields.*, 0..) |field, i| {
-            self.fields[i] = try allocator.dupe(u8, field);
-        }
-        return self;
-    }
-
-    pub fn get(self: *const Fields) !*const [][]const u8 {
-        self.fields[self.fields.len - 1] = try std.fmt.allocPrint(allocator, "{d}", .{self.count});
-        return &self.fields;
-    }
-};
-
-const UniqueAgregator = struct {
-    var uniqueSet: ?std.StringHashMap(u1) = null;
-    var initialized = false;
-
-    fn init() void {
-        if (options.unique) {
-            if (!initialized) {
-                uniqueSet = std.StringHashMap(u1).init(allocator);
-                initialized = true;
-            } else {
-                uniqueSet.?.clearRetainingCapacity();
-            }
-        }
-    }
-
-    inline fn isNew(line: []u8) !bool {
-        if (!uniqueSet.?.contains(line)) {
-            try uniqueSet.?.put(try allocator.dupe(u8, line), 1);
-            return true;
-        }
-        return false;
-    }
-};
-
-const CountAggregator = struct {
-    var countMap: std.StringHashMap(Fields) = undefined;
-    var keyBuffer: std.ArrayList(u8) = undefined;
-    var initialized = false;
-
-    fn init() !void {
-        if (options.count) {
-            if (!initialized) {
-                countMap = std.StringHashMap(Fields).init(allocator);
-                keyBuffer = try std.ArrayList(u8).initCapacity(allocator, 1024);
-                initialized = true;
-            } else {
-                countMap.clearRetainingCapacity();
-                keyBuffer.clearRetainingCapacity();
-            }
-        }
-    }
-
-    fn add(fields: *const [][]const u8) !void {
-        if (countMap.getEntry(try getKey(fields))) |entry| {
-            entry.value_ptr.*.count += 1;
-        } else {
-            try countMap.put(try allocator.dupe(u8, keyBuffer.items), try Fields.init(fields));
-        }
-    }
-
-    fn getKey(fields: *const [][]const u8) ![]u8 {
-        keyBuffer.clearRetainingCapacity();
-        for (fields.*) |field| {
-            try keyBuffer.appendSlice(field);
-            try keyBuffer.append('|');
-        }
-        return keyBuffer.items;
-    }
-};
 
 const FormattedWriter = *const fn (*const std.io.AnyWriter, *const [][]const u8, bool) anyerror!void;
 
@@ -218,9 +150,18 @@ fn proccessFile(fieldReader: *FieldReader, outputFile: std.fs.File) !void {
         return;
     }
 
-    UniqueAgregator.init();
-    try CountAggregator.init();
+    const header = try processHeader(fieldReader);
 
+    if (options.count) {
+        try proccessFileCount(fieldReader, outputFile, header);
+    } else if (options.unique) {
+        try proccessFileUnique(fieldReader, outputFile, header);
+    } else {
+        try proccessFileDirect(fieldReader, outputFile, header);
+    }
+}
+
+fn processHeader(fieldReader: *FieldReader) !?std.ArrayList([]const u8) {
     if (options.fileHeader) {
         if (try fieldReader.readLine()) |fields| {
             try options.setHeaderFields(fields);
@@ -237,6 +178,23 @@ fn proccessFile(fieldReader: *FieldReader, outputFile: std.fs.File) !void {
         fieldReader.setFilterFields(options.filterFields);
     }
 
+    if (options.header != null and options.outputHeader) {
+        var header = std.ArrayList([]const u8).init(allocator);
+        if (try fieldReader.getSelectedFields(options.header.?)) |selectedHeader| {
+            for (selectedHeader) |field| {
+                try header.append(field);
+            }
+
+            if (options.count) {
+                try header.append("Count");
+            }
+        }
+        return header;
+    }
+    return null;
+}
+
+fn proccessFileDirect(fieldReader: *FieldReader, outputFile: std.fs.File, header: ?std.ArrayList([]const u8)) !void {
     var fieldWidths = try FieldWidths.init(options.outputFormat, options.fileHeader, options.header, fieldReader, allocator);
     defer fieldWidths.deinit();
 
@@ -244,45 +202,22 @@ fn proccessFile(fieldReader: *FieldReader, outputFile: std.fs.File) !void {
     try OutputWriter.init(bufferedWriter.writer().any(), fieldWidths);
     defer OutputWriter.deinit();
 
-    if (options.header != null and options.outputHeader) {
-        if (options.count) {
-            const selectedHeader = &(try fieldReader.getSelectedFields(options.header.?)).?;
-            const header = try (try Fields.init(selectedHeader)).get();
-            header.*[header.*.len - 1] = "Count";
-            try OutputWriter.writeDirect(header, true);
-        } else {
-            try OutputWriter.writeDirect(&(try fieldReader.getSelectedFields(options.header.?)).?, true);
-        }
+    if (header != null and options.outputHeader) {
+        try OutputWriter.writeDirect(&header.?.items, true);
     }
 
-    var linesWritten: usize = 0;
-    while (try fieldReader.readLine()) |fields| {
-        if (options.unique) {
-            try OutputWriter.writeBuffered(&fields, false);
-
-            if (try UniqueAgregator.isNew(OutputWriter.getBuffer())) {
-                try OutputWriter.commitBuffer();
-                linesWritten += 1;
-            }
-        } else if (options.count) {
-            try CountAggregator.add(&fields);
-        } else {
+    if (options.outputLimit != 0) {
+        var linesWritten: usize = 0;
+        while (try fieldReader.readLine()) |fields| {
             try OutputWriter.writeDirect(&fields, false);
-            linesWritten += 1;
-        }
-        if (options.outputLimit != 0 and linesWritten >= options.outputLimit) {
-            break;
-        }
-    }
-
-    if (options.count) { //todo: need to update FieldWidths for the count column, currenlt y--count with --format table segfaults
-        var iterator = CountAggregator.countMap.iterator();
-        while (iterator.next()) |entry| {
-            try OutputWriter.writeDirect(try entry.value_ptr.get(), false);
             linesWritten += 1;
             if (options.outputLimit != 0 and linesWritten >= options.outputLimit) {
                 break;
             }
+        }
+    } else {
+        while (try fieldReader.readLine()) |fields| {
+            try OutputWriter.writeDirect(&fields, false);
         }
     }
 
@@ -298,4 +233,68 @@ fn listHeader(fieldReader: *FieldReader) !void {
             _ = try out.write("\n");
         }
     }
+}
+
+fn proccessFileUnique(fieldReader: *FieldReader, outputFile: std.fs.File, outputHeader: ?std.ArrayList([]const u8)) !void {
+    var uniqueAgregator = UniqueAgregator.init(allocator);
+    defer uniqueAgregator.deinit();
+
+    var fieldWidths = try FieldWidths.init(options.outputFormat, options.fileHeader, options.header, fieldReader, allocator);
+    defer fieldWidths.deinit();
+
+    var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
+    try OutputWriter.init(bufferedWriter.writer().any(), fieldWidths);
+    defer OutputWriter.deinit();
+
+    if (outputHeader) |header| {
+        try OutputWriter.writeDirect(&header.items, true);
+    }
+
+    var linesWritten: usize = 0;
+    while (try fieldReader.readLine()) |fields| {
+        try OutputWriter.writeBuffered(&fields, false);
+
+        if (try uniqueAgregator.isNew(OutputWriter.getBuffer())) {
+            try OutputWriter.commitBuffer();
+            linesWritten += 1;
+        }
+        if (options.outputLimit != 0 and linesWritten >= options.outputLimit) {
+            break;
+        }
+    }
+
+    try OutputWriter.end();
+    try bufferedWriter.flush();
+}
+
+fn proccessFileCount(fieldReader: *FieldReader, outputFile: std.fs.File, outputHeader: ?std.ArrayList([]const u8)) !void {
+    var countAggregator = try CountAggregator.init(allocator);
+
+    while (try fieldReader.readLine()) |fields| {
+        try countAggregator.add(&fields);
+    }
+
+    var fieldWidths = try FieldWidths.initCountAggregated(options.outputFormat, outputHeader, &countAggregator.countMap, allocator);
+    defer fieldWidths.deinit();
+
+    var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
+    try OutputWriter.init(bufferedWriter.writer().any(), fieldWidths);
+    defer OutputWriter.deinit();
+
+    if (outputHeader) |header| {
+        try OutputWriter.writeDirect(&header.items, true);
+    }
+
+    var linesWritten: usize = 0;
+    var iterator = countAggregator.countMap.iterator();
+    while (iterator.next()) |entry| {
+        try OutputWriter.writeDirect(try entry.value_ptr.get(), false);
+        linesWritten += 1;
+        if (options.outputLimit != 0 and linesWritten >= options.outputLimit) {
+            break;
+        }
+    }
+
+    try OutputWriter.end();
+    try bufferedWriter.flush();
 }

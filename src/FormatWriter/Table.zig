@@ -7,6 +7,7 @@ allocator: std.mem.Allocator,
 fieldWidths: FieldWidths,
 spaces: []u8 = undefined,
 lineDashes: []u8 = undefined,
+fieldCount: usize = undefined,
 
 pub fn init(
     allocator: std.mem.Allocator,
@@ -41,6 +42,7 @@ pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const 
     }
     _ = try writer.write("│\n");
     try self.writeTableLine(writer, fields.len, "├", "┼", "┤\n");
+    self.fieldCount = fields.len;
 }
 
 pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
@@ -54,7 +56,7 @@ pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const []
 }
 
 pub fn end(self: *Self, writer: *const std.io.AnyWriter) !void {
-    try self.writeTableLine(writer, self.fieldWidths.widths.len, "└", "┴", "┘\n");
+    try self.writeTableLine(writer, self.fieldCount, "└", "┴", "┘\n");
     self.allocator.free(self.spaces);
     self.allocator.free(self.lineDashes);
 }
