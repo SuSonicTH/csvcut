@@ -43,6 +43,8 @@ const Argument = enum {
     @"--extraLF",
     @"--extraCRLF",
     @"--config",
+    @"-o",
+    @"--output",
 };
 
 const Separator = enum {
@@ -89,6 +91,10 @@ pub const Parser = struct {
                     .@"-Q", .@"--outputQuoute" => options.outputQuoute = try getQuoute(args, index, arg),
                     .@"--trim" => options.trim = true,
                     .@"-l", .@"--listHeader" => options.listHeader = true,
+                    .@"-o", .@"--output" => {
+                        options.outputName = try argumentValue(args, index, arg);
+                        skipNext();
+                    },
                     .@"--unique" => {
                         if (options.count) try ExitCode.countAndUniqueAreExclusive.printErrorAndExit(.{});
                         options.unique = true;

@@ -50,6 +50,7 @@ Options:
      --format jsonArray         json with an array of arrays
 
   output:
+     -o, --output [file]          write output to file [file]
      -S, --outputSeparator [sep]  use [sep] as input field separator
                                   sep can be one of:
                                     tab (\t)

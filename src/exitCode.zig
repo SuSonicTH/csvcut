@@ -15,6 +15,7 @@ pub const ExitCode = enum(u8) {
     extraLfWithoutLength,
 
     couldNotOpenInputFile,
+    couldNotOpenOutputFile,
     outOfMemory,
     genericError = 255,
 
@@ -38,6 +39,7 @@ pub const ExitCode = enum(u8) {
             .countAndUniqueAreExclusive => return "--count and --unique are exclusive, use either, not both at the same time",
 
             .couldNotOpenInputFile => return "could not open input file '{s}' reason: {!}",
+            .couldNotOpenOutputFile => return "could not open output file '{s}' reason: {!}",
             .outOfMemory => return "could not allocate more memory",
             .genericError => return "unhandled error '{any}'",
         }
