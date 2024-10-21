@@ -86,7 +86,6 @@ const baseTime = "1899-12-31T00:00:00.000";
 fn checkFormat(field: []const u8) CheckedFormat {
     var isFloat = false;
     var isTime = false;
-    var isDate = false;
     var hasGrouping = false;
 
     if (field.len == 0) return asString(field);
@@ -95,10 +94,8 @@ fn checkFormat(field: []const u8) CheckedFormat {
         if (std.mem.indexOfScalar(u8, "0123456789-,.Ee/:T", char)) |pos| {
             if (pos == 11) {
                 hasGrouping = true;
-            } else if (pos > 11 and pos < 15 and !isDate and !isTime) {
+            } else if (pos > 11 and pos < 15 and !isTime) {
                 isFloat = true;
-            } else if (pos == 15) {
-                isDate = true;
             } else if (pos == 16) {
                 isTime = true;
             }
@@ -108,27 +105,44 @@ fn checkFormat(field: []const u8) CheckedFormat {
     }
 
     const number = removeGrouping(hasGrouping, field);
-
-    if (isTime) {
+    if (field.len >= 10 and ((field[2] == '/' and field[5] == '/') or (field[2] == '-' and field[5] == '-') or (field[2] == '.' and field[5] == '.'))) {
+        //0123456789
+        //dd/mm/yyyy
         std.mem.copyForwards(u8, &numberBuffer, baseTime);
-        switch (field.len) {
-            4 => { //1:23
-                std.mem.copyForwards(u8, numberBuffer[12..], field);
-                return asDateTime("ShortTime", &numberBuffer);
-            },
-            5 => { //12:34
-                std.mem.copyForwards(u8, numberBuffer[11..], field);
-                return asDateTime("ShortTime", &numberBuffer);
-            },
-            8 => { //12:34:56
-                std.mem.copyForwards(u8, numberBuffer[11..], field);
-                return asDateTime("Time", &numberBuffer);
-            },
-            9, 10, 11, 12 => { //12:34:56.123
-                std.mem.copyForwards(u8, numberBuffer[11..], field);
-                return asDateTime("TimeMs", &numberBuffer);
-            },
-            else => return asString(field),
+        std.mem.copyForwards(u8, numberBuffer[0..], field[6..10]);
+        std.mem.copyForwards(u8, numberBuffer[5..], field[3..5]);
+        std.mem.copyForwards(u8, numberBuffer[8..], field[0..2]);
+        if (field.len == 10) {
+            return asDateTime("ShortDate", &numberBuffer);
+        } else {
+            if (setTime(field[11..])) |format| {
+                return format;
+            } else {
+                return asDateTime("ShortDate", &numberBuffer);
+            }
+        }
+    } else if (field.len >= 10 and ((field[4] == '/' and field[7] == '/') or (field[4] == '-' and field[7] == '-') or (field[4] == '.' and field[7] == '.'))) {
+        //0123456789
+        //yyyy/mm/dd
+        std.mem.copyForwards(u8, &numberBuffer, baseTime);
+        std.mem.copyForwards(u8, numberBuffer[0..], field[0..4]);
+        std.mem.copyForwards(u8, numberBuffer[5..], field[5..7]);
+        std.mem.copyForwards(u8, numberBuffer[8..], field[8..10]);
+        if (field.len == 10) {
+            return asDateTime("ShortDate", &numberBuffer);
+        } else {
+            if (setTime(field[11..])) |format| {
+                return format;
+            } else {
+                return asDateTime("ShortDate", &numberBuffer);
+            }
+        }
+    } else if (isTime) {
+        std.mem.copyForwards(u8, &numberBuffer, baseTime);
+        if (setTime(field)) |format| {
+            return format;
+        } else {
+            return asString(field);
         }
     } else if (isFloat) {
         const value = std.fmt.parseFloat(f64, number) catch return asString(field);
@@ -143,6 +157,28 @@ fn checkFormat(field: []const u8) CheckedFormat {
             .format = .integer,
             .value = .{ .integer = value },
         };
+    }
+}
+
+fn setTime(field: []const u8) ?CheckedFormat {
+    switch (field.len) {
+        4 => { //1:23
+            std.mem.copyForwards(u8, numberBuffer[12..], field);
+            return asDateTime("ShortTime", &numberBuffer);
+        },
+        5 => { //12:34
+            std.mem.copyForwards(u8, numberBuffer[11..], field);
+            return asDateTime("ShortTime", &numberBuffer);
+        },
+        8 => { //12:34:56
+            std.mem.copyForwards(u8, numberBuffer[11..], field);
+            return asDateTime("Time", &numberBuffer);
+        },
+        9, 10, 11, 12 => { //12:34:56.123
+            std.mem.copyForwards(u8, numberBuffer[11..], field);
+            return asDateTime("TimeMs", &numberBuffer);
+        },
+        else => return null,
     }
 }
 
