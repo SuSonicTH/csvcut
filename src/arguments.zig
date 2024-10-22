@@ -121,17 +121,18 @@ pub const Parser = struct {
                     .@"-N", .@"--outputNoHeader" => options.outputHeader = false,
                     .@"-I", .@"--include" => {
                         options.addInclude(try argumentValue(args, index, arg)) catch |err| {
-                            if (err == error.IncludeAndExcludeTogether) {
-                                try ExitCode.includeAndExcludeTogether.printErrorAndExit(.{});
+                            switch (err) {
+                                error.IncludeAndExcludeTogether => try ExitCode.includeAndExcludeTogether.printErrorAndExit(.{}),
+                                else => return err,
                             }
-                            return err;
                         };
                         skipNext();
                     },
                     .@"-E", .@"--exclude" => {
                         options.addExclude(try argumentValue(args, index, arg)) catch |err| {
-                            if (err == error.IncludeAndExcludeTogether) {
-                                try ExitCode.includeAndExcludeTogether.printErrorAndExit(.{});
+                            switch (err) {
+                                error.IncludeAndExcludeTogether => try ExitCode.includeAndExcludeTogether.printErrorAndExit(.{}),
+                                else => return err,
                             }
                             return err;
                         };

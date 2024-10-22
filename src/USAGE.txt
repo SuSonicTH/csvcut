@@ -68,14 +68,14 @@ Options:
 
   processing:
      -I, --include [1,2,3]     comma separated list of field names/indices 
-                               use bashlash to escape numeric field names
+                               use backshlash to escape numeric field names
                                can be used multiple times
+                               numeric ranges can be used e.g. 3-6
                                cannot be used with --exclude
 
      -E, --exclude [1,2,3]     comma separated list of field names/indices 
-                               use bashlash to escape numeric field names
-                               can be used multiple times
-                               cannot be used with --include
+                               same rules as --include
+                               but removes given columns from output
 
          --filter [filter,..]  list of filters that are applied
                                argument field1=value1,field2=value2,....

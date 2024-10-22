@@ -116,7 +116,9 @@ pub const Options = struct {
             self.includedFields = std.ArrayList(Selection).init(self.allocator);
         }
         for ((try (try self.getCsvLine()).parse(fields))) |field| {
-            if (toNumber(field)) |index| {
+            if (isRange(field)) |minusPos| {
+                try addRange(&self.includedFields.?, field, minusPos);
+            } else if (toNumber(field)) |index| {
                 try self.includedFields.?.append(.{ .index = index - 1 });
             } else if (field[0] == '\\') {
                 try self.includedFields.?.append(.{ .name = field[1..] });
@@ -133,12 +135,39 @@ pub const Options = struct {
             self.excludedFields = std.ArrayList(Selection).init(self.allocator);
         }
         for ((try (try self.getCsvLine()).parse(fields))) |field| {
-            if (toNumber(field)) |index| {
+            if (isRange(field)) |minusPos| {
+                try addRange(&self.excludedFields.?, field, minusPos);
+            } else if (toNumber(field)) |index| {
                 try self.excludedFields.?.append(.{ .index = index - 1 });
             } else if (field[0] == '\\') {
                 try self.excludedFields.?.append(.{ .name = field[1..] });
             } else {
                 try self.excludedFields.?.append(.{ .name = field });
+            }
+        }
+    }
+
+    fn isRange(field: []const u8) ?usize {
+        if (field.len < 3) return null;
+        var minusPos: ?usize = null;
+        for (field, 0..) |char, index| {
+            if (std.mem.indexOfScalar(u8, "0123456789-", char)) |pos| {
+                if (pos == 10 and index > 0 and index < field.len - 1) {
+                    minusPos = index;
+                }
+            } else {
+                return null;
+            }
+        }
+        return minusPos;
+    }
+
+    fn addRange(list: *std.ArrayList(Selection), field: []const u8, miusPos: usize) !void {
+        if (toNumber(field[0..miusPos])) |from| {
+            if (toNumber(field[miusPos + 1 ..])) |to| {
+                for (from..to + 1) |index| {
+                    try list.append(.{ .index = index - 1 });
+                }
             }
         }
     }
