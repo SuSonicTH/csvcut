@@ -3,7 +3,7 @@ const Self = @This();
 
 allocator: std.mem.Allocator,
 firstLine: bool = true,
-header: [][]const u8 = undefined,
+header: *const [][]const u8 = undefined,
 
 pub fn init(allocator: std.mem.Allocator) !Self {
     return .{
@@ -18,7 +18,7 @@ pub fn start(self: *Self, writer: *const std.io.AnyWriter) !void {
 
 pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
     _ = writer;
-    self.header = try self.allocator.dupe([]const u8, fields.*);
+    self.header = fields;
 }
 
 pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
@@ -28,7 +28,7 @@ pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const []
         self.firstLine = false;
     }
     _ = try writer.write("{");
-    for (self.header, 0..) |name, i| {
+    for (self.header.*, 0..) |name, i| {
         if (i > 0) {
             _ = try writer.write(", ");
         }
@@ -42,6 +42,6 @@ pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const []
 }
 
 pub fn end(self: *Self, writer: *const std.io.AnyWriter) !void {
+    _ = self;
     _ = try writer.write("\n]\n");
-    self.allocator.free(self.header);
 }
