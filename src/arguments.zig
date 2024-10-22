@@ -45,6 +45,7 @@ const Argument = enum {
     @"--config",
     @"-o",
     @"--output",
+    @"--time",
 };
 
 const Separator = enum {
@@ -164,6 +165,9 @@ pub const Parser = struct {
                         const arguments = try readConfigFromFile(try argumentValue(args, index, arg), allocator);
                         try parse(options, arguments.items, allocator);
                         skipNext();
+                    },
+                    .@"--time" => {
+                        options.time = true;
                     },
                 }
             } else {

@@ -60,6 +60,7 @@ pub const Options = struct {
     lengths: ?std.ArrayList(usize) = null,
     extraLineEnd: u2 = 0,
     outputName: ?[]const u8 = null,
+    time: bool = false,
 
     pub fn init(allocator: std.mem.Allocator) !Options {
         return .{

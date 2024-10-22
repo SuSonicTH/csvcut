@@ -78,19 +78,13 @@ fn _main() !void {
         }
     }
 
-    const timeNeeded = @as(f32, @floatFromInt(timer.lap())) / 1000000.0;
-    if (timeNeeded > 1000) {
-        _ = try stderr.print("time needed: {d:0.2}s\n", .{timeNeeded / 1000.0});
-    } else {
-        _ = try stderr.print("time needed: {d:0.2}ms\n", .{timeNeeded});
-    }
-    const memoryUsed = arena.queryCapacity();
-    if (memoryUsed > 5 * 1024 * 1024) {
-        _ = try stderr.print("memory used: {d}mb\n", .{arena.queryCapacity() / 1024 / 1024});
-    } else if (memoryUsed > 5 * 1024) {
-        _ = try stderr.print("memory used: {d}kb\n", .{arena.queryCapacity() / 1024});
-    } else {
-        _ = try stderr.print("memory used: {d}b\n", .{arena.queryCapacity()});
+    if (options.time) {
+        const timeNeeded = @as(f32, @floatFromInt(timer.lap())) / 1000000.0;
+        if (timeNeeded > 1000) {
+            _ = try stderr.print("time needed: {d:0.2}s\n", .{timeNeeded / 1000.0});
+        } else {
+            _ = try stderr.print("time needed: {d:0.2}ms\n", .{timeNeeded});
+        }
     }
 }
 
