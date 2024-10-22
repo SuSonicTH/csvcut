@@ -39,7 +39,7 @@ pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const []
             .integer => _ = try writer.print("<Cell><Data ss:Type=\"Number\">{d}</Data></Cell>", .{val.value.integer}),
             .float => _ = try writer.print("<Cell><Data ss:Type=\"Number\">{d}</Data></Cell>", .{val.value.float}),
             .string => _ = try writer.print("<Cell><Data ss:Type=\"String\">{s}</Data></Cell>", .{val.value.string}),
-            .dateTime => _ = try writer.print("<Cell ss:StyleID=\"{s}\"><Data ss:Type=\"DateTime\">{s}</Data></Cell>", .{ val.style, val.value.string }),
+            .dateTime => _ = try writer.print("<Cell ss:StyleID=\"{s}\"><Data ss:Type=\"DateTime\">{s}</Data></Cell>", .{ val.style, val.value.dateTime }),
         }
     }
     _ = try writer.write("</Row>\n");
@@ -89,9 +89,8 @@ fn checkFormat(field: []const u8) CheckedFormat {
     var hasGrouping = false;
 
     if (field.len == 0) return asString(field);
-
     for (field) |char| {
-        if (std.mem.indexOfScalar(u8, "0123456789-,.Ee/:T", char)) |pos| {
+        if (std.mem.indexOfScalar(u8, "0123456789-,.Ee/:T ", char)) |pos| {
             if (pos == 11) {
                 hasGrouping = true;
             } else if (pos > 11 and pos < 15 and !isTime) {
@@ -115,7 +114,7 @@ fn checkFormat(field: []const u8) CheckedFormat {
         if (field.len == 10) {
             return asDateTime("ShortDate", &numberBuffer);
         } else {
-            if (setTime(field[11..])) |format| {
+            if (setTime(field[11..], true)) |format| {
                 return format;
             } else {
                 return asDateTime("ShortDate", &numberBuffer);
@@ -131,7 +130,7 @@ fn checkFormat(field: []const u8) CheckedFormat {
         if (field.len == 10) {
             return asDateTime("ShortDate", &numberBuffer);
         } else {
-            if (setTime(field[11..])) |format| {
+            if (setTime(field[11..], true)) |format| {
                 return format;
             } else {
                 return asDateTime("ShortDate", &numberBuffer);
@@ -139,7 +138,7 @@ fn checkFormat(field: []const u8) CheckedFormat {
         }
     } else if (isTime) {
         std.mem.copyForwards(u8, &numberBuffer, baseTime);
-        if (setTime(field)) |format| {
+        if (setTime(field, false)) |format| {
             return format;
         } else {
             return asString(field);
@@ -160,26 +159,28 @@ fn checkFormat(field: []const u8) CheckedFormat {
     }
 }
 
-fn setTime(field: []const u8) ?CheckedFormat {
+fn setTime(field: []const u8, isDateTime: bool) ?CheckedFormat {
+    var style: []const u8 = "DateTime";
     switch (field.len) {
         4 => { //1:23
             std.mem.copyForwards(u8, numberBuffer[12..], field);
-            return asDateTime("ShortTime", &numberBuffer);
+            if (!isDateTime) style = "ShortTime";
         },
         5 => { //12:34
             std.mem.copyForwards(u8, numberBuffer[11..], field);
-            return asDateTime("ShortTime", &numberBuffer);
+            if (!isDateTime) style = "ShortTime";
         },
         8 => { //12:34:56
             std.mem.copyForwards(u8, numberBuffer[11..], field);
-            return asDateTime("Time", &numberBuffer);
+            if (!isDateTime) style = "Time";
         },
         9, 10, 11, 12 => { //12:34:56.123
             std.mem.copyForwards(u8, numberBuffer[11..], field);
-            return asDateTime("TimeMs", &numberBuffer);
+            if (!isDateTime) style = "TimeMs";
         },
         else => return null,
     }
+    return asDateTime(style, &numberBuffer);
 }
 
 fn asString(field: []const u8) CheckedFormat {
