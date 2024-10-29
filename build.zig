@@ -4,6 +4,8 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const tracy_enable = b.option(bool, "tracy_enable", "Enable profiling") orelse false;
+
     const lineReader = b.dependency("LineReader", .{
         .target = target,
         .optimize = optimize,
@@ -30,9 +32,21 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("CsvLine", csvLine.module("CsvLine"));
     exe.root_module.addImport("MemMapper", memMapper.module("MemMapper"));
 
+    const tracy = b.dependency("tracy", .{
+        .target = target,
+        .optimize = optimize,
+        .tracy_enable = tracy_enable,
+    });
+    exe.root_module.addImport("tracy", tracy.module("tracy"));
+
+    if (tracy_enable) {
+        exe.linkLibrary(tracy.artifact("tracy"));
+        exe.linkLibCpp();
+    }
+
     if (optimize != .Debug) {
         exe.root_module.strip = true;
-        exe.root_module.single_threaded = true;
+        exe.root_module.single_threaded = if (tracy_enable) false else true;
     }
 
     b.installArtifact(exe);

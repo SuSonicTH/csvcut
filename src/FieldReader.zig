@@ -4,6 +4,8 @@ const CsvLine = @import("CsvLine");
 const Filter = @import("options.zig").Filter;
 const MemMapper = @import("MemMapper").MemMapper;
 
+const tracy = @import("tracy");
+
 allocator: std.mem.Allocator,
 inputLimit: usize,
 skipLine: ?std.AutoHashMap(usize, bool),
@@ -88,6 +90,8 @@ pub fn setFilterFields(self: *Self, filterFields: ?std.ArrayList(Filter)) void {
 }
 
 pub inline fn readLine(self: *Self) !?[][]const u8 {
+    const zone = tracy.initZone(@src(), .{ .name = "readLine" });
+    defer zone.deinit();
     while (true) {
         if (self.inputLimit > 0 and self.inputLimit == self.linesRead) {
             return null;
@@ -123,6 +127,8 @@ inline fn skipLines(self: *Self) !void {
 }
 
 inline fn noFilterOrfilterMatches(self: *Self, fields: [][]const u8) bool {
+    const zone = tracy.initZone(@src(), .{ .name = "noFilterOrfilterMatches" });
+    defer zone.deinit();
     if (self.filterFields == null) {
         return true;
     }
@@ -135,6 +141,8 @@ inline fn noFilterOrfilterMatches(self: *Self, fields: [][]const u8) bool {
 }
 
 pub inline fn getSelectedFields(self: *Self, fields: [][]const u8) !?[][]const u8 {
+    const zone = tracy.initZone(@src(), .{ .name = "getSelectedFields" });
+    defer zone.deinit();
     if (self.selectedIndices) |indices| {
         for (indices, 0..) |field, index| {
             self.selected.?[index] = fields[field];
@@ -206,6 +214,8 @@ const ReaderImpl = union(enum) {
     }
 
     pub fn getFields(self: *ReaderImpl) !?[][]const u8 {
+        const zone = tracy.initZone(@src(), .{ .name = "getFields" });
+        defer zone.deinit();
         switch (self.*) {
             inline else => |*readerImpl| return try readerImpl.getFields(),
         }

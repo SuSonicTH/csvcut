@@ -15,10 +15,15 @@ const CountAggregator = Aggregate.CountAggregator;
 const UniqueAgregator = Aggregate.UniqueAgregator;
 const ExitCode = @import("exitCode.zig").ExitCode;
 
+const tracy = @import("tracy");
+
 var allocator: std.mem.Allocator = undefined;
 var options: Options = undefined;
 
 pub fn main() !void {
+    const zone = tracy.initZone(@src(), .{ .name = "main" });
+    defer zone.deinit();
+
     _main() catch |err| switch (err) {
         error.OutOfMemory => ExitCode.outOfMemory.printErrorAndExit(.{}),
         else => ExitCode.genericError.printErrorAndExit(.{err}),
@@ -31,7 +36,9 @@ fn _main() !void {
     defer Utf8Output.deinit();
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var tracingAllocator = tracy.TracingAllocator.init(gpa.allocator());
+
+    var arena = std.heap.ArenaAllocator.init(tracingAllocator.allocator());
     defer arena.deinit();
     allocator = arena.allocator();
 
@@ -142,6 +149,8 @@ const OutputWriter = struct {
     }
 
     fn writeDirect(fields: *const [][]const u8, isHeader: bool) !void {
+        const zone = tracy.initZone(@src(), .{ .name = "writeDirect" });
+        defer zone.deinit();
         if (isHeader) {
             try formatWriter.writeHeader(&outputWriter, fields);
         } else {
@@ -209,6 +218,9 @@ pub fn bigBufferedWriter(underlying_stream: anytype) std.io.BufferedWriter(1024 
 }
 
 fn proccessFileDirect(fieldReader: *FieldReader, outputFile: std.fs.File, header: ?std.ArrayList([]const u8)) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "proccessFileDirect" });
+    defer zone.deinit();
+
     var fieldWidths = try FieldWidths.init(options.outputFormat, options.fileHeader, options.header, fieldReader, allocator);
     defer fieldWidths.deinit();
 
