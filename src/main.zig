@@ -252,8 +252,16 @@ fn proccessFileDirect(fieldReader: *FieldReader, outputFile: std.fs.File, header
 }
 
 fn listHeader(fieldReader: *FieldReader) !void {
-    const out = std.io.getStdOut();
-    if (try fieldReader.readLine()) |fields| {
+    var header: ?[][]const u8 = null;
+
+    if (options.header != null) {
+        header = options.header.?;
+    } else if (try fieldReader.readLine()) |fields| {
+        header = fields;
+    }
+
+    if (header) |fields| {
+        const out = std.io.getStdOut();
         for (fields) |field| {
             _ = try out.write(field);
             _ = try out.write("\n");
