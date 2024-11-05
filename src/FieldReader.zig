@@ -12,7 +12,7 @@ linesRead: usize = 0,
 selectedIndices: ?[]usize = null,
 excludedIndices: ?std.AutoHashMap(usize, bool) = null,
 selected: ?[][]const u8 = null,
-filterFields: ?std.ArrayList(Filter) = null,
+filterFields: ?std.ArrayList([]Filter) = null,
 readerImpl: ReaderImpl,
 
 const Self = @This();
@@ -83,7 +83,7 @@ pub fn setExcludedIndices(self: *Self, excludedIndices: ?std.AutoHashMap(usize, 
     }
 }
 
-pub fn setFilterFields(self: *Self, filterFields: ?std.ArrayList(Filter)) void {
+pub fn setFilterFields(self: *Self, filterFields: std.ArrayList([]Filter)) void {
     self.filterFields = filterFields;
 }
 
@@ -126,9 +126,21 @@ inline fn noFilterOrfilterMatches(self: *Self, fields: [][]const u8) bool {
     if (self.filterFields == null) {
         return true;
     }
-    for (self.filterFields.?.items) |filter| {
-        if (!std.mem.eql(u8, fields[filter.index], filter.value)) {
-            return false;
+
+    for (self.filterFields.?.items, 1..) |filterFields, index| {
+        var match = true;
+        for (filterFields) |filter| {
+            if (!std.mem.eql(u8, fields[filter.index], filter.value)) {
+                if (self.filterFields.?.items.len == index) {
+                    return false;
+                } else {
+                    match = false;
+                    break;
+                }
+            }
+        }
+        if (match) {
+            return true;
         }
     }
     return true;

@@ -183,7 +183,7 @@ fn processHeader(fieldReader: *FieldReader) !?std.ArrayList([]const u8) {
     try fieldReader.setSelectedIndices(options.selectedIndices);
     try fieldReader.setExcludedIndices(options.excludedIndices);
 
-    if (options.filterFields != null) {
+    if (options.filterFields.items.len > 0) {
         try options.setFilterIndices();
         fieldReader.setFilterFields(options.filterFields);
     }

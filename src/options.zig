@@ -47,7 +47,7 @@ pub const Options = struct {
     selectedIndices: ?[]usize = null,
     excludedIndices: ?std.AutoHashMap(usize, bool) = null,
     trim: bool = false,
-    filterFields: ?std.ArrayList(Filter) = null,
+    filterFields: std.ArrayList([]Filter),
     outputFormat: OutputFormat = .csv,
     listHeader: bool = false,
     useStdin: bool = false,
@@ -66,6 +66,7 @@ pub const Options = struct {
         return .{
             .allocator = allocator,
             .inputFiles = std.ArrayList([]const u8).init(allocator),
+            .filterFields = std.ArrayList([]Filter).init(allocator),
         };
     }
 
@@ -199,9 +200,10 @@ pub const Options = struct {
     }
 
     pub fn setFilterIndices(self: *Options) OptionError!void {
-        if (self.filterFields == null) return;
-        for (0..self.filterFields.?.items.len) |i| {
-            self.filterFields.?.items[i].index = try getHeaderIndex(self, self.filterFields.?.items[i].field);
+        for (self.filterFields.items) |fields| {
+            for (0..fields.len) |i| {
+                fields[i].index = try getHeaderIndex(self, fields[i].field);
+            }
         }
     }
 
@@ -218,22 +220,20 @@ pub const Options = struct {
     }
 
     pub fn addFilter(self: *Options, filterList: []const u8) !void {
-        if (self.filterFields == null) {
-            self.filterFields = std.ArrayList(Filter).init(self.allocator);
-        }
-        for ((try (try self.getCsvLine()).parse(filterList))) |filterString| {
-            var filter: Filter = .{};
+        const list = (try (try self.getCsvLine()).parse(filterList));
+        var filter = try self.allocator.alloc(Filter, list.len);
+        try self.filterFields.append(filter);
+        for (list, 0..) |filterString, f| {
             var it = std.mem.split(u8, filterString, "=");
             var i: u8 = 0;
             while (it.next()) |value| {
                 switch (i) {
-                    0 => filter.field = value,
-                    1 => filter.value = value,
+                    0 => filter[f].field = value,
+                    1 => filter[f].value = value,
                     else => return OptionError.MoreThanOneEqualInFilter,
                 }
                 i += 1;
             }
-            try self.filterFields.?.append(filter);
         }
     }
 

@@ -79,6 +79,8 @@ Options:
 
          --filter [filter,..]  list of filters that are applied
                                argument field1=value1,field2=value2,....
+                               can be used multiple times, if any filter matches
+                               the line will be output
 
          --trim                removes space & tab characters from start & end
          --unique              only output unique lines
