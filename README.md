@@ -6,12 +6,12 @@ Feedback from more experienced zig developers is very welcome.
 If you find any bug or you see some non-idiomatic costructs please let me know.
 
 ## Usage
-see [src/USAGE.txt](https://github.com/SuSonicTH/csvcut/blob/master/src/USAGE.txt)
+see [src/USAGE.txt](src/USAGE.txt)
 
 ## Licence
 csvcut is licensed under the MIT license
 
-see [LICENSE.txt](https://github.com/SuSonicTH/csvcut/blob/master/LICENSE.txt)
+see [LICENSE.txt](LICENSE.txt)
 
 ## Build requirements
 To build csvcut you just need the zig compiler, which can be downloaded from [https://ziglang.org/download/](https://ziglang.org/download/) 
