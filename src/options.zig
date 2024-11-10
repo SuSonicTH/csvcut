@@ -1,12 +1,6 @@
 const std = @import("std");
 const CsvLine = @import("CsvLine").CsvLine;
 
-pub const Filter = struct {
-    field: []const u8 = undefined,
-    value: []const u8 = undefined,
-    index: usize = undefined,
-};
-
 pub const OutputFormat = enum {
     csv,
     lazyMarkdown,
@@ -42,12 +36,12 @@ pub const Options = struct {
     fileHeader: bool = true,
     header: ?[][]const u8 = null,
     outputHeader: bool = true,
-    includedFields: ?std.ArrayList(Selection) = null,
-    excludedFields: ?std.ArrayList(Selection) = null,
+    includedFields: ?SelectionList = null,
+    excludedFields: ?SelectionList = null,
     selectedIndices: ?[]usize = null,
     excludedIndices: ?std.AutoHashMap(usize, bool) = null,
+    filters: ?std.ArrayList(Filter) = null,
     trim: bool = false,
-    filterFields: std.ArrayList([]Filter),
     outputFormat: OutputFormat = .csv,
     listHeader: bool = false,
     useStdin: bool = false,
@@ -66,7 +60,6 @@ pub const Options = struct {
         return .{
             .allocator = allocator,
             .inputFiles = std.ArrayList([]const u8).init(allocator),
-            .filterFields = std.ArrayList([]Filter).init(allocator),
         };
     }
 
@@ -77,6 +70,9 @@ pub const Options = struct {
         }
         if (self.selectedIndices) |selectedIndices| {
             self.allocator.free(selectedIndices);
+        }
+        if (self.filters) |filters| {
+            filters.deinit();
         }
         if (self.excludedFields) |selectedFields| {
             selectedFields.deinit();
@@ -114,18 +110,10 @@ pub const Options = struct {
         if (self.excludedFields != null) {
             return error.IncludeAndExcludeTogether;
         } else if (self.includedFields == null) {
-            self.includedFields = std.ArrayList(Selection).init(self.allocator);
+            self.includedFields = try SelectionList.init(self.allocator);
         }
         for ((try (try self.getCsvLine()).parse(fields))) |field| {
-            if (isRange(field)) |minusPos| {
-                try addRange(&self.includedFields.?, field, minusPos);
-            } else if (toNumber(field)) |index| {
-                try self.includedFields.?.append(.{ .index = index - 1 });
-            } else if (field[0] == '\\') {
-                try self.includedFields.?.append(.{ .name = field[1..] });
-            } else {
-                try self.includedFields.?.append(.{ .name = field });
-            }
+            try self.includedFields.?.append(field);
         }
     }
 
@@ -133,19 +121,152 @@ pub const Options = struct {
         if (self.includedFields != null) {
             return error.IncludeAndExcludeTogether;
         } else if (self.excludedFields == null) {
-            self.excludedFields = std.ArrayList(Selection).init(self.allocator);
+            self.excludedFields = try SelectionList.init(self.allocator);
         }
         for ((try (try self.getCsvLine()).parse(fields))) |field| {
-            if (isRange(field)) |minusPos| {
-                try addRange(&self.excludedFields.?, field, minusPos);
-            } else if (toNumber(field)) |index| {
-                try self.excludedFields.?.append(.{ .index = index - 1 });
-            } else if (field[0] == '\\') {
-                try self.excludedFields.?.append(.{ .name = field[1..] });
-            } else {
-                try self.excludedFields.?.append(.{ .name = field });
+            try self.excludedFields.?.append(field);
+        }
+    }
+
+    pub fn calculateFieldIndices(self: *Options) !void {
+        if (self.includedFields != null) {
+            self.selectedIndices = try self.includedFields.?.calculateIndices(self.header);
+        } else if (self.excludedFields != null) {
+            self.excludedIndices = std.AutoHashMap(usize, bool).init(self.allocator);
+            for (try self.excludedFields.?.calculateIndices(self.header)) |index| {
+                try self.excludedIndices.?.put(index, true);
             }
         }
+        if (self.filters != null) {
+            for (0..self.filters.?.items.len) |i| {
+                try self.filters.?.items[i].calculateIndices(self.header);
+            }
+        }
+    }
+
+    pub fn addFilter(self: *Options, filterList: []const u8) !void {
+        if (self.filters == null) {
+            self.filters = std.ArrayList(Filter).init(self.allocator);
+        }
+        const list = (try (try self.getCsvLine()).parse(filterList));
+
+        try self.filters.?.append(try Filter.init(self.allocator));
+        for (list) |filterString| {
+            try self.filters.?.items[self.filters.?.items.len - 1].append(filterString);
+        }
+    }
+
+    pub fn addSkipLines(self: *Options, list: []const u8) !void {
+        if (self.skipLine == null) {
+            self.skipLine = std.AutoHashMap(usize, bool).init(self.allocator);
+        }
+        for ((try (try self.getCsvLine()).parse(list))) |item| {
+            const lineNumber = try std.fmt.parseInt(usize, item, 10);
+            try self.skipLine.?.put(lineNumber, true);
+        }
+    }
+
+    pub fn setInputLimit(self: *Options, value: []const u8) !void {
+        self.inputLimit = try std.fmt.parseInt(usize, value, 10);
+    }
+
+    pub fn setOutputLimit(self: *Options, value: []const u8) !void {
+        self.outputLimit = try std.fmt.parseInt(usize, value, 10);
+    }
+
+    pub fn setLenghts(self: *Options, value: []const u8) !void {
+        self.lengths = try std.ArrayList(usize).initCapacity(self.allocator, 16);
+        for (try (try self.getCsvLine()).parse(value)) |len| {
+            try self.lengths.?.append(try std.fmt.parseInt(usize, len, 10));
+        }
+    }
+};
+
+pub const Filter = struct {
+    selectionList: SelectionList,
+    values: std.ArrayList([]const u8),
+
+    pub fn init(allocator: std.mem.Allocator) !Filter {
+        return .{
+            .selectionList = try SelectionList.init(allocator),
+            .values = std.ArrayList([]const u8).init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *Filter) !void {
+        self.selectionList.deinit();
+        self.values.deinit();
+    }
+
+    pub fn append(self: *Filter, filter: []const u8) !void {
+        var it = std.mem.split(u8, filter, "=");
+        if (it.next()) |field| {
+            try self.selectionList.append(field);
+        }
+        if (it.next()) |value| {
+            try self.values.append(value);
+        } else {
+            try self.values.append("");
+        }
+        if (it.next()) |_| {
+            return OptionError.MoreThanOneEqualInFilter;
+        }
+    }
+
+    pub fn calculateIndices(self: *Filter, header: ?[][]const u8) !void {
+        _ = try self.selectionList.calculateIndices(header);
+    }
+
+    pub fn matches(self: *const Filter, fields: [][]const u8) bool {
+        for (self.selectionList.indices.?, 0..) |fieldIndex, i| {
+            if (!std.mem.eql(u8, fields[fieldIndex], self.values.items[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
+const SelectionList = struct {
+    allocator: std.mem.Allocator,
+    list: std.ArrayList(Selection),
+    indices: ?[]usize = null,
+
+    pub fn init(allocator: std.mem.Allocator) !SelectionList {
+        return .{
+            .allocator = allocator,
+            .list = std.ArrayList(Selection).init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *const SelectionList) void {
+        self.list.deinit();
+        if (self.indices) |indices| {
+            self.allocator.free(indices);
+        }
+    }
+
+    pub fn append(self: *SelectionList, field: []const u8) !void {
+        if (isRange(field)) |minusPos| {
+            try addRange(&self.list, field, minusPos);
+        } else if (toNumber(field)) |index| {
+            try self.list.append(.{ .index = index - 1 });
+        } else if (field[0] == '\\') {
+            try self.list.append(.{ .name = field[1..] });
+        } else {
+            try self.list.append(.{ .name = field });
+        }
+    }
+
+    pub fn calculateIndices(self: *SelectionList, header: ?[][]const u8) ![]usize {
+        self.indices = try self.allocator.alloc(usize, self.list.items.len);
+        for (self.list.items, 0..) |item, i| {
+            switch (item) {
+                .index => |index| self.indices.?[i] = index,
+                .name => |name| self.indices.?[i] = try getHeaderIndex(header, name),
+            }
+        }
+        return self.indices.?;
     }
 
     fn isRange(field: []const u8) ?usize {
@@ -177,88 +298,15 @@ pub const Options = struct {
         return std.fmt.parseInt(usize, field, 10) catch null;
     }
 
-    pub fn calculateSelectedIndices(self: *Options) !void {
-        if ((self.includedFields == null and self.excludedFields == null) or self.selectedIndices != null or self.excludedIndices != null) return;
-
-        if (self.includedFields != null) {
-            self.selectedIndices = try self.allocator.alloc(usize, self.includedFields.?.items.len);
-            for (self.includedFields.?.items, 0..) |item, i| {
-                switch (item) {
-                    .index => |index| self.selectedIndices.?[i] = index,
-                    .name => |name| self.selectedIndices.?[i] = try getHeaderIndex(self, name),
-                }
-            }
-        } else {
-            self.excludedIndices = std.AutoHashMap(usize, bool).init(self.allocator);
-            for (self.excludedFields.?.items) |item| {
-                switch (item) {
-                    .index => |index| try self.excludedIndices.?.put(index, true),
-                    .name => |name| try self.excludedIndices.?.put(try getHeaderIndex(self, name), true),
-                }
-            }
-        }
-    }
-
-    pub fn setFilterIndices(self: *Options) OptionError!void {
-        for (self.filterFields.items) |fields| {
-            for (0..fields.len) |i| {
-                fields[i].index = try getHeaderIndex(self, fields[i].field);
-            }
-        }
-    }
-
-    fn getHeaderIndex(self: *Options, search: []const u8) OptionError!usize {
-        if (self.header == null) {
+    fn getHeaderIndex(header: ?[][]const u8, search: []const u8) OptionError!usize {
+        if (header == null) {
             return OptionError.NoHeader;
         }
 
-        return for (self.header.?, 0..) |field, index| {
+        return for (header.?, 0..) |field, index| {
             if (std.mem.eql(u8, field, search)) {
                 break index;
             }
         } else OptionError.NoSuchField;
-    }
-
-    pub fn addFilter(self: *Options, filterList: []const u8) !void {
-        const list = (try (try self.getCsvLine()).parse(filterList));
-        var filter = try self.allocator.alloc(Filter, list.len);
-        try self.filterFields.append(filter);
-        for (list, 0..) |filterString, f| {
-            var it = std.mem.split(u8, filterString, "=");
-            var i: u8 = 0;
-            while (it.next()) |value| {
-                switch (i) {
-                    0 => filter[f].field = value,
-                    1 => filter[f].value = value,
-                    else => return OptionError.MoreThanOneEqualInFilter,
-                }
-                i += 1;
-            }
-        }
-    }
-
-    pub fn addSkipLines(self: *Options, list: []const u8) !void {
-        if (self.skipLine == null) {
-            self.skipLine = std.AutoHashMap(usize, bool).init(self.allocator);
-        }
-        for ((try (try self.getCsvLine()).parse(list))) |item| {
-            const lineNumber = try std.fmt.parseInt(usize, item, 10);
-            try self.skipLine.?.put(lineNumber, true);
-        }
-    }
-
-    pub fn setInputLimit(self: *Options, value: []const u8) !void {
-        self.inputLimit = try std.fmt.parseInt(usize, value, 10);
-    }
-
-    pub fn setOutputLimit(self: *Options, value: []const u8) !void {
-        self.outputLimit = try std.fmt.parseInt(usize, value, 10);
-    }
-
-    pub fn setLenghts(self: *Options, value: []const u8) !void {
-        self.lengths = try std.ArrayList(usize).initCapacity(self.allocator, 16);
-        for (try (try self.getCsvLine()).parse(value)) |len| {
-            try self.lengths.?.append(try std.fmt.parseInt(usize, len, 10));
-        }
     }
 };

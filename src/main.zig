@@ -179,14 +179,10 @@ fn processHeader(fieldReader: *FieldReader) !?std.ArrayList([]const u8) {
         fieldReader.resetLinesRead();
     }
 
-    try options.calculateSelectedIndices();
+    try options.calculateFieldIndices();
     try fieldReader.setSelectedIndices(options.selectedIndices);
-    try fieldReader.setExcludedIndices(options.excludedIndices);
-
-    if (options.filterFields.items.len > 0) {
-        try options.setFilterIndices();
-        fieldReader.setFilterFields(options.filterFields);
-    }
+    fieldReader.setExcludedIndices(options.excludedIndices);
+    fieldReader.setFilters(options.filters);
 
     if (options.header != null and options.outputHeader) {
         var header = std.ArrayList([]const u8).init(allocator);

@@ -12,7 +12,7 @@ linesRead: usize = 0,
 selectedIndices: ?[]usize = null,
 excludedIndices: ?std.AutoHashMap(usize, bool) = null,
 selected: ?[][]const u8 = null,
-filterFields: ?std.ArrayList([]Filter) = null,
+filters: ?std.ArrayList(Filter) = null,
 readerImpl: ReaderImpl,
 
 const Self = @This();
@@ -77,14 +77,16 @@ pub fn setSelectedIndices(self: *Self, selectedIndices: ?[]usize) !void {
     }
 }
 
-pub fn setExcludedIndices(self: *Self, excludedIndices: ?std.AutoHashMap(usize, bool)) !void {
+pub fn setExcludedIndices(self: *Self, excludedIndices: ?std.AutoHashMap(usize, bool)) void {
     if (excludedIndices) |indices| {
         self.excludedIndices = indices;
     }
 }
 
-pub fn setFilterFields(self: *Self, filterFields: std.ArrayList([]Filter)) void {
-    self.filterFields = filterFields;
+pub fn setFilters(self: *Self, filterList: ?std.ArrayList(Filter)) void {
+    if (filterList) |filters| {
+        self.filters = filters;
+    }
 }
 
 pub inline fn readLine(self: *Self) !?[][]const u8 {
@@ -123,27 +125,16 @@ inline fn skipLines(self: *Self) !void {
 }
 
 inline fn noFilterOrfilterMatches(self: *Self, fields: [][]const u8) bool {
-    if (self.filterFields == null) {
+    if (self.filters == null) {
         return true;
     }
 
-    for (self.filterFields.?.items, 1..) |filterFields, index| {
-        var match = true;
-        for (filterFields) |filter| {
-            if (!std.mem.eql(u8, fields[filter.index], filter.value)) {
-                if (self.filterFields.?.items.len == index) {
-                    return false;
-                } else {
-                    match = false;
-                    break;
-                }
-            }
-        }
-        if (match) {
+    for (self.filters.?.items) |filter| {
+        if (filter.matches(fields)) {
             return true;
         }
     }
-    return true;
+    return false;
 }
 
 pub inline fn getSelectedFields(self: *Self, fields: [][]const u8) !?[][]const u8 {

@@ -46,6 +46,7 @@ const Argument = enum {
     @"-o",
     @"--output",
     @"--time",
+    @"--anonymize",
 };
 
 const Separator = enum {
@@ -140,6 +141,10 @@ pub const Parser = struct {
                     },
                     .@"--filter" => {
                         try options.addFilter(try argumentValue(args, index, arg));
+                        skipNext();
+                    },
+                    .@"--anonymize" => {
+                        //try options.addFilter(try argumentValue(args, index, arg));
                         skipNext();
                     },
                     .@"--stdin" => options.useStdin = true,
