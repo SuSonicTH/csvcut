@@ -28,7 +28,19 @@ pub const FormatWriter = union(OutputFormat) {
     jsonArray: JsonArray,
     excelXml: ExcelXml,
 
-    pub fn init(options: Options, allocator: std.mem.Allocator, fieldWidths: FieldWidths) !FormatWriter {
+    var anonymizeIndices: ?[]usize = null;
+    var anonymizefields: []std.ArrayList(u8) = undefined;
+
+    pub fn init(options: Options, allocator: std.mem.Allocator, fieldWidths: FieldWidths, anonymize: ?[]usize) !FormatWriter {
+        
+        if (anonymize!=null) {
+            anonymizeIndices = anonymize;
+            anonymizefields = allocator.alloc(std.ArrayList(u8), anonymize.?.len);
+            for (anonymizeIndices,0..) | _,i | {
+                anonymizefields[i].init(allocator);
+            }
+        }
+
         return switch (options.outputFormat) {
             .csv => .{ .csv = try CsvWriter.init(.{ .separator = options.outputSeparator, .quoute = options.outputQuoute }) },
             .lazyMarkdown => .{ .lazyMarkdown = try LazyMarkdown.init() },
@@ -66,5 +78,12 @@ pub const FormatWriter = union(OutputFormat) {
         switch (self.*) {
             inline else => |*formatWriter| try formatWriter.end(writer),
         }
+    }
+
+    fn anonymizeFields(fields: *const [][]const u8) *const [][]const u8 {
+        if (anonymizeIndices==null) {    
+            return fields;     
+        }
+        
     }
 };

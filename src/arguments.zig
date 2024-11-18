@@ -144,7 +144,7 @@ pub const Parser = struct {
                         skipNext();
                     },
                     .@"--anonymize" => {
-                        //try options.addFilter(try argumentValue(args, index, arg));
+                        try options.addAnonymize(try argumentValue(args, index, arg));
                         skipNext();
                     },
                     .@"--stdin" => options.useStdin = true,
