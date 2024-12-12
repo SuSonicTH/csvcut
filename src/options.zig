@@ -38,9 +38,7 @@ pub const Options = struct {
     outputHeader: bool = true,
     includedFields: ?SelectionList = null,
     excludedFields: ?SelectionList = null,
-    anonymizedFields: ?SelectionList = null,
     selectedIndices: ?[]usize = null,
-    anonymizedIndices: ?[] usize = null,
     excludedIndices: ?std.AutoHashMap(usize, bool) = null,
     filters: ?std.ArrayList(Filter) = null,
     trim: bool = false,
@@ -72,9 +70,6 @@ pub const Options = struct {
         }
         if (self.selectedIndices) |selectedIndices| {
             self.allocator.free(selectedIndices);
-        }
-        if (self.anonymizedFields) |anonymizedFields| {
-            anonymizedFields.deinit();
         }
         if (self.filters) |filters| {
             filters.deinit();
@@ -142,9 +137,6 @@ pub const Options = struct {
                 try self.excludedIndices.?.put(index, true);
             }
         }
-        if (self.anonymizedFields != null) {
-            self.anonymizedIndices = try self.anonymizedFields.?.calculateIndices(self.header);
-        }
         if (self.filters != null) {
             for (0..self.filters.?.items.len) |i| {
                 try self.filters.?.items[i].calculateIndices(self.header);
@@ -161,15 +153,6 @@ pub const Options = struct {
         try self.filters.?.append(try Filter.init(self.allocator));
         for (list) |filterString| {
             try self.filters.?.items[self.filters.?.items.len - 1].append(filterString);
-        }
-    }
-
-    pub fn addAnonymize(self: *Options, fields: []const u8) !void {
-        if (self.anonymizedFields == null) {
-            self.anonymizedFields = try SelectionList.init(self.allocator);
-        }
-        for ((try (try self.getCsvLine()).parse(fields))) |field| {
-            try self.anonymizedFields.?.append(field);
         }
     }
 
