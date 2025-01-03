@@ -308,3 +308,7 @@ fn proccessFileCount(fieldReader: *FieldReader, outputFile: std.fs.File, outputH
     try OutputWriter.end();
     try bufferedWriter.flush();
 }
+
+test {
+    std.testing.refAllDecls(@This());
+}
