@@ -73,7 +73,7 @@ pub fn resetLinesRead(self: *Self) void {
 pub fn setSelectedIndices(self: *Self, selectedIndices: ?[]usize) !void {
     if (selectedIndices) |indices| {
         self.selectedIndices = indices;
-        self.selected = try self.allocator.alloc([]u8, selectedIndices.?.len);
+        self.selected = try self.allocator.alloc([]const u8, selectedIndices.?.len);
     }
 }
 
@@ -145,7 +145,7 @@ pub inline fn getSelectedFields(self: *Self, fields: [][]const u8) !?[][]const u
         return self.selected;
     } else if (self.excludedIndices) |indices| {
         if (self.selected == null) {
-            self.selected = try self.allocator.alloc([]u8, fields.len);
+            self.selected = try self.allocator.alloc([]const u8, fields.len);
         }
         var i: usize = 0;
         for (fields, 0..) |field, index| {
@@ -323,7 +323,7 @@ const WidthFileReader = struct {
         errdefer reader.deinit();
         reader.data = try reader.memMapper.map(u8, .{});
         reader.fieldProperties = try calculateFieldProperties(widhts, &reader.recordSize, allocator);
-        reader.fields = try allocator.alloc([]u8, widhts.len);
+        reader.fields = try allocator.alloc([]const u8, widhts.len);
         return reader;
     }
 
@@ -387,7 +387,7 @@ const WidthReader = struct {
             .allocator = allocator,
             .reader = anyReader,
             .trim = trim,
-            .fields = try allocator.alloc([]u8, widhts.len),
+            .fields = try allocator.alloc([]const u8, widhts.len),
             .extraLineEnd = extraLineEnd,
         };
         errdefer reader.deinit();

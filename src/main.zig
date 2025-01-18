@@ -37,6 +37,8 @@ fn _main() !void {
 
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
+    const arguments = try castArgs(args);
+    defer allocator.free(arguments);
 
     options = try Options.init(allocator);
     defer options.deinit();
@@ -44,7 +46,7 @@ fn _main() !void {
     if (config.readConfigFromFile("default.config", allocator) catch null) |defaultArguments| {
         try ArgumentParser.parse(&options, defaultArguments.items, allocator);
     }
-    try ArgumentParser.parse(&options, args, allocator);
+    try ArgumentParser.parse(&options, arguments, allocator);
     try ArgumentParser.validateArguments(&options);
 
     const stderr = std.io.getStdErr().writer();
@@ -86,6 +88,14 @@ fn _main() !void {
             _ = try stderr.print("time needed: {d:0.2}ms\n", .{timeNeeded});
         }
     }
+}
+
+fn castArgs(args: [][:0]u8) ![][]const u8 {
+    var ret = try allocator.alloc([]const u8, args.len);
+    for (args, 0..) |arg, i| {
+        ret[i] = arg[0..];
+    }
+    return ret;
 }
 
 fn processFileByName(fileName: []const u8, outputFile: std.fs.File) !void {

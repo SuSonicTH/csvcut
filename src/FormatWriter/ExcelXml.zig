@@ -25,7 +25,7 @@ pub fn start(self: *Self, writer: *const std.io.AnyWriter) !void {
 
 pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
     try self.writeData(writer, fields);
-    self.header = try self.allocator.alloc([]u8, fields.*.len);
+    self.header = try self.allocator.alloc([]const u8, fields.*.len);
     for (fields.*, 0..) |field, i| {
         self.header[i] = try self.allocator.dupe(u8, field);
     }

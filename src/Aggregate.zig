@@ -10,7 +10,7 @@ pub const Fields = struct {
         var self: Fields = (try allocator.alloc(Fields, 1))[0];
         self.allocator = allocator;
         self.count = 1;
-        self.fields = try allocator.alloc([]u8, fields.len + 1);
+        self.fields = try allocator.alloc([]const u8, fields.len + 1);
         for (fields.*, 0..) |field, i| {
             self.fields[i] = try allocator.dupe(u8, field);
         }

@@ -199,7 +199,7 @@ pub const Filter = struct {
     }
 
     pub fn append(self: *Filter, filter: []const u8) !void {
-        var it = std.mem.split(u8, filter, "=");
+        var it = std.mem.splitScalar(u8, filter, '=');
         if (it.next()) |field| {
             try self.selectionList.append(field);
         }
