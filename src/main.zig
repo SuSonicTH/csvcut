@@ -53,7 +53,7 @@ fn _main() !void {
 
     var outputFile: std.fs.File = undefined;
     if (options.outputName) |outputName| {
-        outputFile = std.fs.cwd().openFile(outputName, .{ .mode = .write_only }) catch |err| ExitCode.couldNotOpenOutputFile.printErrorAndExit(.{ outputName, err });
+        outputFile = std.fs.cwd().createFile(outputName, .{}) catch |err| ExitCode.couldNotOpenOutputFile.printErrorAndExit(.{ outputName, err });
     } else {
         outputFile = std.io.getStdOut();
     }
