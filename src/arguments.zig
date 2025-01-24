@@ -216,7 +216,7 @@ pub const Parser = struct {
 
     fn printUsage() !void {
         const help = @embedFile("USAGE.txt");
-        try std.io.getStdOut().writeAll(version ++ help);
+        try std.io.getStdOut().writeAll(version ++ "\n" ++ help);
         try ExitCode.OK.exit();
     }
 
