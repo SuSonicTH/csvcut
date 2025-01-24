@@ -26,7 +26,7 @@ Options:
      -q, --quote single         use single quouttes (')
      -q, --quote double         use double quoutes (")
 
-     -h, --header               use given heder (field1,field2,...)
+     -h, --header [fields]      use given heder [field1,field2,...]
      -n, --noHeader             file has no header
          --skipLines list       skip lines numbers in list
                                 indices as 0-based, header has zero index
@@ -48,6 +48,9 @@ Options:
      --format htmlHandson       html with HandsonTable (sorting, filtering,...)
      --format json              json with array of objects
      --format jsonArray         json with an array of arrays
+     --format excelXml          excel xml file. Save with .xls extention
+                                gives warning in Excel about incorrect extension
+                                but opens without a problem
 
   output:
      -o, --output [file]          write output to file [file]
