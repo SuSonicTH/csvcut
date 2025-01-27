@@ -15,7 +15,7 @@ see [LICENSE.txt](LICENSE.txt)
 
 ## Build requirements
 To build csvcut you just need the zig compiler, which can be downloaded from [https://ziglang.org/download/](https://ziglang.org/download/) 
-Currently zig 0.13.0 is supported, builds might break in never versions.
+Currently zig master (0.14.0) is supported, builds might break in never and older versions.
 There is no installation needed, just download the package for your operating system an extract the archive and add it to your `PATH`
 
 ### Windows example
