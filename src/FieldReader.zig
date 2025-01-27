@@ -56,8 +56,8 @@ pub fn initWidthReader(reader: std.io.AnyReader, widhts: []usize, trim: bool, in
 
 pub fn deinit(self: *Self) void {
     self.readerImpl.deinit();
-    if (self.selectedIndices != null) {
-        self.allocator.free(self.selected);
+    if (self.selected != null) {
+        self.allocator.free(self.selected.?);
     }
 }
 
@@ -209,9 +209,9 @@ const ReaderImpl = union(enum) {
         };
     }
 
-    pub fn deinit(self: *ReaderImpl) !void {
+    pub fn deinit(self: *ReaderImpl) void {
         switch (self.*) {
-            inline else => |*readerImpl| try readerImpl.deinit(),
+            inline else => |*readerImpl| readerImpl.deinit(),
         }
     }
 
@@ -250,8 +250,8 @@ const CsvFileReader = struct {
 
     fn deinit(self: *CsvFileReader) void {
         self.lineReader.deinit();
-        if (self.csvLine) |csvLine| {
-            csvLine.free();
+        if (self.csvLine != null) {
+            self.csvLine.?.free();
         }
     }
 

@@ -16,6 +16,7 @@ pub const ExitCode = enum(u8) {
 
     couldNotOpenInputFile,
     couldNotOpenOutputFile,
+    couldNotReadHeader,
     outOfMemory,
     genericError = 255,
 
@@ -40,6 +41,7 @@ pub const ExitCode = enum(u8) {
 
             .couldNotOpenInputFile => return "could not open input file '{s}' reason: {!}",
             .couldNotOpenOutputFile => return "could not open output file '{s}' reason: {!}",
+            .couldNotReadHeader => return "could not read header from file '{s}'",
             .outOfMemory => return "could not allocate more memory",
             .genericError => return "unhandled error '{any}'",
         }
