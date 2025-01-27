@@ -4,89 +4,94 @@ processes csv files or stdin and outputs in different tabular formats
 optionally does line filtering/limiting or selecting of columns
 
 Options:
-     -h, --help               display this help and exit
-     -v, --version            display version/license and exit
-     -l, --listHeader         print the file header and exit
-         --exitCodes          print a list of all exit codes
+-h, --help                     display this help and exit
+-v, --version                  display version/license and exit
+-l, --listHeader               print the file header and exit
+    --exitCodes                print a list of all exit codes
+    --config [file]            config file with list of arguments
+                               file is searched in current directory
+                               then in $HOME/.config/csvcut
+                               pauses argument processing an applies config
+                               then continues to apply command line arguments
+ input:
+  -s, --separator sep          use sep as input field separator
+      sep can be one of:
+         tab (\t)
+         comma (,) {Default}
+         semicolon (;)
+         pipe (|)
+ 
+  -q, --quote no               no quouting {default for performance}
+  -q, --quote single           use single quouttes (')
+  -q, --quote double           use double quoutes (")
+ 
+  -h, --header [field,...]     use given heder [field1,field2,...]
+  -n, --noHeader               file has no header
+      --skipLines list         skip lines numbers in list
+                               indices as 0-based, header has zero index
 
-         --config [file]      config file with list of arguments
-                              file is searched in current directory
-                              then in $HOME/.config/csvcut
-                              pauses argument processing an applies config
-                              then continues to apply command line arguments
-  input:
-     -s, --separator sep        use sep as input field separator
-         sep can be one of:
-            tab (\t)
-            comma (,) {Default}
-            semicolon (;)
-            pipe (|)
+      --inputLimit  lim        limit the input processing to lim lines
+      --lengths [1,2,3]        comma separated list of field lengths
+                               processes input as fixed filed (record) length
+ 
+      --extraLF                with --lengths to read an extra end of line
+      --extraCRLF              with --lengths to read 2 extra EOL characters
+ 
+ output formats:
+  --format csv                 csv file for format options see output section
+  --format lazyMarkdown        compact markdown table format
+  --format markdown            evenly spaced markdown table format (slower)
+  --format lazyJira            compact jira/confluence markup table format
+  --format jira                evenly spaced jira/confluence table (slower)
+  --format table               evenly spaced console table format (slower)
+  --format html                plain html with a table
+  --format htmlHandson         html with HandsonTable (sorting, filtering,...)
+  --format json                json with array of objects
+  --format jsonArray           json with an array of arrays
+  --format excelXml            excel xml file. Save with .xls extention
+                                  gives warning in Excel about incorrect extension
+                                  but opens without a problem
+ 
+ output:
+  -o, --output [file]          write output to file [file]
+  -S, --outputSeparator [sep]  use [sep] as input field separator
+                               sep can be one of:
+                                 tab (\t)
+                                 comma (,) {Default}
+                                 semicolon (;)
+                                 pipe (|)
 
-     -q, --quote no             no quouting {default for performance}
-     -q, --quote single         use single quouttes (')
-     -q, --quote double         use double quoutes (")
+  -Q, --quoteOutput no         no quouting {default for performance}
+  -Q, --quoteOutput single     use single quouttes (')
+  -Q, --quoteOutput double     use double quoutes (")
 
-     -h, --header [fields]      use given heder [field1,field2,...]
-     -n, --noHeader             file has no header
-         --skipLines list       skip lines numbers in list
-                                indices as 0-based, header has zero index
-         --inputLimit  lim      limit the input processing to lim lines
-         --lengths [1,2,3]      comma separated list of field lengths
-                                processes input as fixed filed (record) length
-
-         --extraLF              with --lengths to read an extra end of line
-         --extraCRLF            with --lengths to read 2 extra EOL characters
-
-  output formats:
-     --format csv               csv file for format options see output section
-     --format lazyMarkdown      compact markdown table format 
-     --format markdown          evenly spaced markdown table format (slower)
-     --format lazyJira          compact jira/confluence markup table format
-     --format jira              evenly spaced jira/confluence table (slower)
-     --format table             evenly spaced console table format (slower)
-     --format html              plain html with a table
-     --format htmlHandson       html with HandsonTable (sorting, filtering,...)
-     --format json              json with array of objects
-     --format jsonArray         json with an array of arrays
-     --format excelXml          excel xml file. Save with .xls extention
-                                gives warning in Excel about incorrect extension
-                                but opens without a problem
-
-  output:
-     -o, --output [file]          write output to file [file]
-     -S, --outputSeparator [sep]  use [sep] as input field separator
-                                  sep can be one of:
-                                    tab (\t)
-                                    comma (,) {Default}
-                                    semicolon (;)
-                                    pipe (|)
-
-     -Q, --quoteOutput no         no quouting {default for performance}
-     -Q, --quoteOutput single     use single quouttes (')
-     -Q, --quoteOutput double     use double quoutes (")
-
-     -N, --outputNoHeader         don't write header to output
-         
-         --outputLimit lim        limit the the number of lines outputted to lim
+  -N, --outputNoHeader         don't write header to output
+ 
+      --outputLimit lim        limit the the number of lines outputted to lim
 
   processing:
-     -I, --include [1,2,3]     comma separated list of field names/indices 
+  -I, --include [1,2,3]        comma separated list of field names/indices
                                use backshlash to escape numeric field names
                                can be used multiple times
                                numeric ranges can be used e.g. 3-6
                                cannot be used with --exclude
 
-     -E, --exclude [1,2,3]     comma separated list of field names/indices 
+  -E, --exclude [1,2,3]        comma separated list of field names/indices
                                same rules as --include
                                but removes given columns from output
 
-         --filter [filter,..]  list of filters that are applied
+      --filter [filter,..]     list of filters that are applied
                                argument field1=value1,field2=value2,....
                                can be used multiple times, if any filter matches
                                the line will be output
 
-         --trim                removes space & tab characters from start & end
-         --unique              only output unique lines
+      --filterOut [filter,...] list of negative filters that are applied
+                               inverse of --filter
+                               ignores lines that match any filter
+                               is applied befroe --filter
+
+      --trim                   removes space & tab characters from start & end
+      --unique                 only output unique lines
                                check is applied after other processings
 
-         --count               like --unique but adds a count column
+      --count                  like --unique but adds a count column

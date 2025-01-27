@@ -29,6 +29,7 @@ const Argument = enum {
     @"--exclude",
     @"--trim",
     @"--filter",
+    @"--filterOut",
     @"--format",
     @"-l",
     @"--listHeader",
@@ -142,6 +143,11 @@ pub const Parser = struct {
                         try options.addFilter(try argumentValue(args, index, arg));
                         skipNext();
                     },
+                    .@"--filterOut" => {
+                        try options.addFilterOut(try argumentValue(args, index, arg));
+                        skipNext();
+                    },
+
                     .@"--stdin" => options.useStdin = true,
                     .@"--skipLines" => {
                         try options.addSkipLines(try argumentValue(args, index, arg));

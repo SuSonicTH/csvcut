@@ -13,6 +13,7 @@ selectedIndices: ?[]usize = null,
 excludedIndices: ?std.AutoHashMap(usize, bool) = null,
 selected: ?[][]const u8 = null,
 filters: ?std.ArrayList(Filter) = null,
+filtersOut: ?std.ArrayList(Filter) = null,
 readerImpl: ReaderImpl,
 
 const Self = @This();
@@ -89,6 +90,12 @@ pub fn setFilters(self: *Self, filterList: ?std.ArrayList(Filter)) void {
     }
 }
 
+pub fn setFiltersOut(self: *Self, filterOutList: ?std.ArrayList(Filter)) void {
+    if (filterOutList) |filters| {
+        self.filtersOut = filters;
+    }
+}
+
 pub inline fn readLine(self: *Self) !?[][]const u8 {
     while (true) {
         if (self.inputLimit > 0 and self.inputLimit == self.linesRead) {
@@ -125,6 +132,18 @@ inline fn skipLines(self: *Self) !void {
 }
 
 inline fn noFilterOrfilterMatches(self: *Self, fields: [][]const u8) bool {
+    if (self.filters == null and self.filtersOut == null) {
+        return true;
+    }
+
+    if (self.filtersOut) |filtersOut| {
+        for (filtersOut.items) |filter| {
+            if (filter.matches(fields)) {
+                return false;
+            }
+        }
+    }
+
     if (self.filters == null) {
         return true;
     }

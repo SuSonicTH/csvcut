@@ -47,8 +47,19 @@ fn _main() !void {
         try ArgumentParser.parse(&options, defaultArguments.items, allocator);
     }
     try ArgumentParser.parse(&options, arguments, allocator);
-    try ArgumentParser.validateArguments(&options);
 
+    if (options.header != null and options.listHeader) {
+        const out = std.io.getStdOut();
+        if (options.header) |header| {
+            for (header) |field| {
+                _ = try out.write(field);
+                _ = try out.write("\n");
+            }
+        }
+        return;
+    }
+
+    try ArgumentParser.validateArguments(&options);
     const stderr = std.io.getStdErr().writer();
 
     var outputFile: std.fs.File = undefined;
@@ -193,6 +204,7 @@ fn processHeader(fieldReader: *FieldReader) !?std.ArrayList([]const u8) {
     try fieldReader.setSelectedIndices(options.selectedIndices);
     fieldReader.setExcludedIndices(options.excludedIndices);
     fieldReader.setFilters(options.filters);
+    fieldReader.setFiltersOut(options.filtersOut);
 
     if (options.header != null and options.outputHeader) {
         var header = std.ArrayList([]const u8).init(allocator);
@@ -247,17 +259,10 @@ fn proccessFileDirect(fieldReader: *FieldReader, outputFile: std.fs.File, header
 
 fn listHeader(fieldReader: *FieldReader) !void {
     const out = std.io.getStdOut();
-    if (options.header) |header| {
-        for (header) |field| {
+    if (try fieldReader.readLine()) |fields| {
+        for (fields) |field| {
             _ = try out.write(field);
             _ = try out.write("\n");
-        }
-    } else {
-        if (try fieldReader.readLine()) |fields| {
-            for (fields) |field| {
-                _ = try out.write(field);
-                _ = try out.write("\n");
-            }
         }
     }
 }

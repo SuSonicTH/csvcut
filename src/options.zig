@@ -41,6 +41,7 @@ pub const Options = struct {
     selectedIndices: ?[]usize = null,
     excludedIndices: ?std.AutoHashMap(usize, bool) = null,
     filters: ?std.ArrayList(Filter) = null,
+    filtersOut: ?std.ArrayList(Filter) = null,
     trim: bool = false,
     outputFormat: OutputFormat = .csv,
     listHeader: bool = false,
@@ -73,6 +74,9 @@ pub const Options = struct {
         }
         if (self.filters) |filters| {
             filters.deinit();
+        }
+        if (self.filtersOut) |filtersOut| {
+            filtersOut.deinit();
         }
         if (self.excludedFields) |selectedFields| {
             selectedFields.deinit();
@@ -142,6 +146,11 @@ pub const Options = struct {
                 try self.filters.?.items[i].calculateIndices(self.header);
             }
         }
+        if (self.filtersOut != null) {
+            for (0..self.filtersOut.?.items.len) |i| {
+                try self.filtersOut.?.items[i].calculateIndices(self.header);
+            }
+        }
     }
 
     pub fn addFilter(self: *Options, filterList: []const u8) !void {
@@ -153,6 +162,18 @@ pub const Options = struct {
         try self.filters.?.append(try Filter.init(self.allocator));
         for (list) |filterString| {
             try self.filters.?.items[self.filters.?.items.len - 1].append(filterString);
+        }
+    }
+
+    pub fn addFilterOut(self: *Options, filterList: []const u8) !void {
+        if (self.filtersOut == null) {
+            self.filtersOut = std.ArrayList(Filter).init(self.allocator);
+        }
+        const list = (try (try self.getCsvLine()).parse(filterList));
+
+        try self.filtersOut.?.append(try Filter.init(self.allocator));
+        for (list) |filterString| {
+            try self.filtersOut.?.items[self.filtersOut.?.items.len - 1].append(filterString);
         }
     }
 
