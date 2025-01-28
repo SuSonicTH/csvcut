@@ -21,20 +21,20 @@ There is no installation needed, just download the package for your operating sy
 ### Windows example
 execute following commands in a windows Command Prompt (cmd.exe)
 ```cmd
-curl https://ziglang.org/download/0.13.0/zig-windows-x86_64-0.13.0.zip --output zig.zip
+curl https://ziglang.org/builds/zig-windows-x86_64-0.14.0-dev.2851+b074fb7dd.zip --output zig.zip
 tar -xf zig.zip
 del zig.zip
-move zig-windows-x86_64* zig
+move zig-windows-x86_64-0.14.0-dev* zig
 set PATH=%cd%\zig;%PATH%
 ```
 
 ### Linux example
 execute following commands in a shell
 ```bash
-curl https://ziglang.org/download/0.12.0/zig-linux-x86_64-0.12.0.tar.xz --output zig.tar.xz
+curl zig-linux-x86_64-0.14.0-dev.2851+b074fb7dd.tar.xz --output zig.tar.xz
 tar -xf zig.tar.xz
 rm zig.tar.xz
-mv zig-linux-x86_64* zig
+mv zig-linux-x86_64-0.14.0-dev* zig
 export PATH=$(pwd)/zig:$PATH
 ```
 
