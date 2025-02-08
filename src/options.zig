@@ -1,5 +1,5 @@
 const std = @import("std");
-const CsvLine = @import("CsvLine").CsvLine;
+const CsvLine = @import("CsvLine.zig");
 
 pub const OutputFormat = enum {
     csv,
@@ -45,7 +45,6 @@ pub const Options = struct {
     trim: bool = false,
     outputFormat: OutputFormat = .csv,
     listHeader: bool = false,
-    useStdin: bool = false,
     inputFiles: std.ArrayList([]const u8),
     skipLine: ?std.AutoHashMap(usize, bool) = null,
     unique: bool = false,
@@ -88,7 +87,7 @@ pub const Options = struct {
             self.allocator.free(header);
         }
         if (self.csvLine != null) {
-            self.csvLine.?.free();
+            self.csvLine.?.deinit();
         }
         if (self.skipLine != null) {
             self.skipLine.?.deinit();

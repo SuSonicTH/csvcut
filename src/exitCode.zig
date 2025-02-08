@@ -6,7 +6,6 @@ pub const ExitCode = enum(u8) {
     OK,
     noArgumentError,
     noInputError,
-    stdinOrFileError,
     unknownArgumentError,
     argumentWithUnknownValueError,
     argumentValueMissingError,
@@ -20,8 +19,6 @@ pub const ExitCode = enum(u8) {
     outOfMemory,
     genericError = 255,
 
-    const useStdinMessage = "\n          use --stdin if you want to process standard input";
-
     pub fn code(self: ExitCode) u8 {
         return @intFromEnum(self);
     }
@@ -29,9 +26,8 @@ pub const ExitCode = enum(u8) {
     pub fn message(self: ExitCode) []const u8 {
         switch (self) {
             .OK => return "",
-            .noArgumentError => return "no argument given, expecting at least one argument" ++ useStdinMessage,
-            .noInputError => return "no input file given" ++ useStdinMessage,
-            .stdinOrFileError => return "use either --stdin or input file(s) not both" ++ useStdinMessage,
+            .noArgumentError => return "no argument given, expecting at least one argument",
+            .noInputError => return "no input file given",
             .unknownArgumentError => return "argument '{s}' is unknown",
             .argumentWithUnknownValueError => return "argument '{s}' got unknown value '{s}'",
             .argumentValueMissingError => return "value for argument '{s}' is missing",

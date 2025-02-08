@@ -1,5 +1,5 @@
 const std = @import("std");
-const CsvLine = @import("CsvLine");
+const CsvLine = @import("CsvLine.zig");
 const Filter = @import("options.zig").Filter;
 
 const MemMappedLineReader = @import("MemMappedLineReader.zig");
@@ -42,7 +42,7 @@ pub fn deinit(self: *Self) void {
 pub fn reset(self: *Self) !void {
     self.lineNumber = 0;
     self.linesRead = 0;
-    try self.readerImpl.reset();
+    try self.lineReader.reset();
 }
 
 pub fn resetLinesRead(self: *Self) void {
@@ -96,18 +96,22 @@ pub inline fn readLine(self: *Self) !?[][]const u8 {
 }
 
 inline fn doSkipLines(self: *Self) !void {
-    if (self.skipLine != null) {
-        while (self.skipLine.?.get(self.lineNumber) != null) {
-            _ = try self.lineReader.readLine();
-            self.lineNumber += 1;
-            self.linesRead += 1;
+    if (self.skipLines != null) {
+        while (self.skipLines.?.get(self.lineNumber) != null) {
+            try self.skipOneLine();
         }
     }
 }
 
+pub inline fn skipOneLine(self: *Self) !void {
+    _ = try self.lineReader.readLine();
+    self.lineNumber += 1;
+    self.linesRead += 1;
+}
+
 fn getFields(self: *Self) !?[][]const u8 {
     if (try self.lineReader.readLine()) |line| {
-        try self.csvLine.?.parse(line);
+        return try self.csvLine.parse(line);
     }
     return null;
 }

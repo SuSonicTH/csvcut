@@ -1,7 +1,6 @@
 const std = @import("std");
 const CsvLine = @import("CsvLine").CsvLine;
 const OutputFormat = @import("options.zig").OutputFormat;
-const FieldReader = @import("FieldReader.zig");
 const escape = @import("FormatWriter/escape.zig");
 const Fields = @import("Aggregate.zig").Fields;
 const CountAggregator = @import("Aggregate.zig").CountAggregator;
@@ -12,7 +11,7 @@ allocator: ?std.mem.Allocator = null,
 widths: []usize = undefined,
 maxSpace: usize = undefined,
 
-pub fn init(outputFormat: OutputFormat, fileHeader: bool, header: ?[][]const u8, fieldReader: *FieldReader, allocator: std.mem.Allocator) !Self {
+pub fn init(outputFormat: OutputFormat, fileHeader: bool, header: ?[][]const u8, fieldReader: anytype, allocator: std.mem.Allocator) !Self {
     switch (outputFormat) {
         .markdown, .jira, .table => {
             const widths = try collectWidths(fieldReader, header, allocator, outputFormat);
@@ -48,7 +47,7 @@ pub fn deinit(self: *Self) void {
     }
 }
 
-fn collectWidths(fieldReader: *FieldReader, header: ?[][]const u8, allocator: std.mem.Allocator, outputFormat: OutputFormat) ![]usize {
+fn collectWidths(fieldReader: anytype, header: ?[][]const u8, allocator: std.mem.Allocator, outputFormat: OutputFormat) ![]usize {
     var fieldWidths: []usize = undefined;
     if (header) |head| {
         fieldWidths = try allocator.alloc(usize, head.len);
@@ -100,7 +99,7 @@ inline fn updateFieldWidths(outputFormat: OutputFormat, fields: [][]const u8, fi
     }
 }
 
-inline fn resetReader(fieldReader: *FieldReader, fileHeader: bool) !void {
+inline fn resetReader(fieldReader: anytype, fileHeader: bool) !void {
     try fieldReader.reset();
     if (fileHeader) {
         try fieldReader.skipOneLine();

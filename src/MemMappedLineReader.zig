@@ -1,5 +1,5 @@
 const std = @import("std");
-const MemMapper = @import("MemMapper").MemMapper;
+const MemMapper = @import("MemMapper.zig");
 
 memMapper: MemMapper,
 includeEol: bool,
