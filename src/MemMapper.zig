@@ -89,17 +89,20 @@ const CloseHandle = windows.CloseHandle;
 const testing = std.testing;
 
 test "simple mapping for reading" {
-    const file = try std.fs.cwd().createFile("test.txt", .{
+    const message = "This is a Test";
+    const file = try std.fs.cwd().createFile("./test/MemMapperReading.txt", .{
         .read = true,
         .truncate = false,
         .exclusive = false,
     });
+    _ = try file.write(message);
+
     var mapper = try init(file, false);
     defer mapper.deinit();
 
     const tst = try mapper.map(u8, .{});
     defer mapper.unmap(tst);
 
-    try testing.expectEqualStrings("This is a Test", tst);
+    try testing.expectEqualStrings(message, tst);
     try testing.expectEqual(14, tst.len);
 }

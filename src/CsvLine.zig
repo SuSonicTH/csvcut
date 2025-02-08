@@ -128,86 +128,87 @@ const hpa = std.heap.page_allocator;
 const testing = std.testing;
 
 fn expectEqualStringsArray(expected: []const []const u8, actual: [][]const u8) !void {
-    try testing.expectEqual(expected.len, actual.len);
+    try testing.expect(expected.len <= actual.len);
     for (expected, 0..) |exp, idx| {
         try testing.expectEqualStrings(exp, actual[idx]);
     }
+    try testing.expectEqual(expected.len, actual.len);
 }
 
 test "basic parsing" {
     var csvLine = try init(hpa, .{});
-    defer csvLine.free();
+    defer csvLine.deinit();
     try expectEqualStringsArray(&[_][]const u8{ "1", "2", "3" }, try csvLine.parse("1,2,3"));
 }
 
 test "basic parsing - first empty" {
     var csvLine = try init(hpa, .{});
-    defer csvLine.free();
+    defer csvLine.deinit();
     try expectEqualStringsArray(&[_][]const u8{ "", "2", "3" }, try csvLine.parse(",2,3"));
 }
 
 test "basic parsing - middle empty" {
     var csvLine = try init(hpa, .{});
-    defer csvLine.free();
+    defer csvLine.deinit();
     try expectEqualStringsArray(&[_][]const u8{ "1", "", "3" }, try csvLine.parse("1,,3"));
 }
 
 test "basic parsing - last empty" {
     var csvLine = try init(hpa, .{});
-    defer csvLine.free();
+    defer csvLine.deinit();
     try expectEqualStringsArray(&[_][]const u8{ "1", "2", "" }, try csvLine.parse("1,2,"));
 }
 
 test "basic parsing - all empty" {
     var csvLine = try init(hpa, .{});
-    defer csvLine.free();
+    defer csvLine.deinit();
     try expectEqualStringsArray(&[_][]const u8{ "", "", "" }, try csvLine.parse(",,"));
 }
 
 test "basic parsing with tab separator" {
     var csvLine = try init(hpa, .{ .separator = Separator.tab });
-    defer csvLine.free();
+    defer csvLine.deinit();
     try expectEqualStringsArray(&[_][]const u8{ "1", "2", "3" }, try csvLine.parse("1\t2\t3"));
 }
 
 test "basic parsing with semicolon separator" {
     var csvLine = try init(hpa, .{ .separator = Separator.semicolon });
-    defer csvLine.free();
+    defer csvLine.deinit();
     try expectEqualStringsArray(&[_][]const u8{ "1", "2", "3" }, try csvLine.parse("1;2;3"));
 }
 
 test "basic parsing with pipe separator" {
     var csvLine = try init(hpa, .{ .separator = Separator.pipe });
-    defer csvLine.free();
+    defer csvLine.deinit();
     try expectEqualStringsArray(&[_][]const u8{ "1", "2", "3" }, try csvLine.parse("1|2|3"));
 }
 
 test "basic quouted parsing" {
     var csvLine = try init(hpa, .{ .quoute = Quoute.single });
-    defer csvLine.free();
+    defer csvLine.deinit();
     try expectEqualStringsArray(&[_][]const u8{ "1", "2", "3" }, try csvLine.parse("'1','2','3'"));
 }
 
 test "basic quouted parsing - spaces in fields" {
     var csvLine = try init(hpa, .{ .quoute = Quoute.single });
-    defer csvLine.free();
+    defer csvLine.deinit();
     try expectEqualStringsArray(&[_][]const u8{ " 1", "2 ", " 3 " }, try csvLine.parse("' 1','2 ',' 3 '"));
 }
 
 test "basic quouted parsing - spaces outside fields" {
     var csvLine = try init(hpa, .{ .quoute = Quoute.single });
-    defer csvLine.free();
+    defer csvLine.deinit();
     try expectEqualStringsArray(&[_][]const u8{ "1", "2", "3" }, try csvLine.parse("   '1','2' , '3'    "));
 }
 
 test "quouted parsing - expect error for non closed quoute" {
     var csvLine = try init(hpa, .{ .quoute = Quoute.single });
-    defer csvLine.free();
+    defer csvLine.deinit();
     try testing.expectError(ParserError.FoundEndOfLineAfterOpeningQuoute, csvLine.parse("'1,2,3"));
 }
 
 test "whitespace trimming" {
     var csvLine = try init(hpa, .{ .trim = true });
-    defer csvLine.free();
+    defer csvLine.deinit();
     try expectEqualStringsArray(&[_][]const u8{ "1", "2", "3", "", "", "" }, try csvLine.parse("\t1,2 , \t 3\t , ,\t,  \t \t"));
 }
