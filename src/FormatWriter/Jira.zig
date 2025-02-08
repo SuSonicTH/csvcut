@@ -9,10 +9,7 @@ fieldWidths: FieldWidths,
 spaces: []u8 = undefined,
 dashes: []u8 = undefined,
 
-pub fn init(
-    allocator: std.mem.Allocator,
-    fieldWidths: FieldWidths,
-) !Self {
+pub fn init(allocator: std.mem.Allocator, fieldWidths: FieldWidths) !Self {
     return .{
         .allocator = allocator,
         .fieldWidths = fieldWidths,
