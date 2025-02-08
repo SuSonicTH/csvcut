@@ -97,8 +97,6 @@ fn castArgs(args: [][:0]u8) ![][]const u8 {
     return ret;
 }
 
-const FormattedWriter = *const fn (*const std.io.AnyWriter, *const [][]const u8, bool) anyerror!void;
-
 const OutputWriter = struct {
     var formatWriter: FormatWriter = undefined;
     var lineBuffer: std.ArrayList(u8) = undefined;
