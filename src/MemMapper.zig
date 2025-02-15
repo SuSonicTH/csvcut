@@ -87,15 +87,18 @@ const CloseHandle = windows.CloseHandle;
 // Test
 
 const testing = std.testing;
+const testUtils = @import("testUtils.zig");
+
+const writeFile = testUtils.writeFile;
 
 test "simple mapping for reading" {
     const message = "This is a Test";
-    const file = try std.fs.cwd().createFile("./test/MemMapperReading.txt", .{
-        .read = true,
-        .truncate = false,
-        .exclusive = false,
-    });
-    _ = try file.write(message);
+    const fileName = "./test/MemMapperReading.txt";
+
+    try writeFile(fileName, message);
+
+    var file = try std.fs.cwd().openFile(fileName, .{});
+    defer file.close();
 
     var mapper = try init(file, false);
     defer mapper.deinit();

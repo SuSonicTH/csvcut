@@ -90,21 +90,10 @@ fn getFields(self: *Self) !?[][]const u8 {
 
 const hpa = std.heap.page_allocator;
 const testing = std.testing;
+const testUtils = @import("testUtils.zig");
 
-fn expectEqualStringsArray(expected: []const []const u8, actual: [][]const u8) !void {
-    try testing.expect(expected.len <= actual.len);
-    for (expected, 0..) |exp, idx| {
-        try testing.expectEqualStrings(exp, actual[idx]);
-    }
-    try testing.expectEqual(expected.len, actual.len);
-}
-
-fn writeFile(file_path: []const u8, data: []const u8) !void {
-    const file = try std.fs.cwd().createFile(file_path, .{});
-    defer file.close();
-
-    try file.writeAll(data);
-}
+const writeFile = testUtils.writeFile;
+const expectEqualStringsArray = testUtils.expectEqualStringsArray;
 
 fn expectDataMatches(reader: *Self) !void {
     try expectEqualStringsArray(&[_][]const u8{ "A ", "B   ", "C     ", "D         " }, (try reader.getFields()).?);
