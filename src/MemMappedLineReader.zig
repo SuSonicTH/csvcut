@@ -56,3 +56,71 @@ pub fn readLine(self: *Self) !?[]const u8 {
 pub fn reset(self: *Self) !void {
     self.next = 0;
 }
+
+// Tests
+
+const testing = std.testing;
+const testUtils = @import("testUtils.zig");
+
+const writeFile = testUtils.writeFile;
+const fileName: []const u8 = "./test/MemMappedLineReaderTest.tyt";
+
+test "file with LF" {
+    try writeFile(fileName, "one\ntwo\nthree\n");
+
+    var file = try std.fs.cwd().openFile(fileName, .{});
+    defer file.close();
+
+    var reader = try init(&file, false);
+    defer reader.deinit();
+
+    try testing.expectEqualStrings("one", (try reader.readLine()).?);
+    try testing.expectEqualStrings("two", (try reader.readLine()).?);
+    try testing.expectEqualStrings("three", (try reader.readLine()).?);
+    try testing.expectEqual(null, try reader.readLine());
+}
+
+test "file with CR LF" {
+    try writeFile(fileName, "one\r\ntwo\r\nthree\r\n");
+
+    var file = try std.fs.cwd().openFile(fileName, .{});
+    defer file.close();
+
+    var reader = try init(&file, false);
+    defer reader.deinit();
+
+    try testing.expectEqualStrings("one", (try reader.readLine()).?);
+    try testing.expectEqualStrings("two", (try reader.readLine()).?);
+    try testing.expectEqualStrings("three", (try reader.readLine()).?);
+    try testing.expectEqual(null, try reader.readLine());
+}
+
+test "file with LF included" {
+    try writeFile(fileName, "one\ntwo\nthree\n");
+
+    var file = try std.fs.cwd().openFile(fileName, .{});
+    defer file.close();
+
+    var reader = try init(&file, true);
+    defer reader.deinit();
+
+    try testing.expectEqualStrings("one\n", (try reader.readLine()).?);
+    try testing.expectEqualStrings("two\n", (try reader.readLine()).?);
+    try testing.expectEqualStrings("three\n", (try reader.readLine()).?);
+    try testing.expectEqual(null, try reader.readLine());
+}
+
+test "file with CR LF included" {
+    try writeFile(fileName, "one\r\ntwo\r\nthree\r\n");
+
+    var file = try std.fs.cwd().openFile(fileName, .{});
+    defer file.close();
+
+    var reader = try init(&file, true);
+    defer reader.deinit();
+
+    try testing.expectEqualStrings("one\r\n", (try reader.readLine()).?);
+    try testing.expectEqualStrings("two\r\n", (try reader.readLine()).?);
+    try testing.expectEqualStrings("three\r\n", (try reader.readLine()).?);
+    try testing.expectEqual(null, try reader.readLine());
+}
