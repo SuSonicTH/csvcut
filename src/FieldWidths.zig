@@ -100,7 +100,7 @@ inline fn updateFieldWidths(outputFormat: OutputFormat, fields: [][]const u8, fi
 }
 
 inline fn resetReader(fieldReader: anytype, fileHeader: bool) !void {
-    try fieldReader.reset();
+    fieldReader.reset();
     if (fileHeader) {
         try fieldReader.skipOneLine();
         fieldReader.resetLinesRead();

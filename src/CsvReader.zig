@@ -39,10 +39,10 @@ pub fn deinit(self: *Self) void {
     self.csvLine.deinit();
 }
 
-pub fn reset(self: *Self) !void {
+pub fn reset(self: *Self) void {
     self.lineNumber = 0;
     self.linesRead = 0;
-    try self.lineReader.reset();
+    self.lineReader.reset();
 }
 
 pub fn resetLinesRead(self: *Self) void {
