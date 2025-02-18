@@ -88,7 +88,6 @@ fn getFields(self: *Self) !?[][]const u8 {
 
 // Tests
 
-const hpa = std.heap.page_allocator;
 const testing = std.testing;
 const testUtils = @import("testUtils.zig");
 
@@ -109,7 +108,7 @@ test "fields without EOL" {
     var file = try std.fs.cwd().openFile(fileName, .{});
     defer file.close();
 
-    var reader = try init(&file, &.{ 2, 4, 6, 10 }, false, 0, hpa);
+    var reader = try init(&file, &.{ 2, 4, 6, 10 }, false, 0, testing.allocator);
     defer reader.deinit();
 
     try expectDataMatches(&reader);
@@ -122,7 +121,7 @@ test "fields with LF" {
     var file = try std.fs.cwd().openFile(fileName, .{});
     defer file.close();
 
-    var reader = try init(&file, &.{ 2, 4, 6, 10 }, false, 1, hpa);
+    var reader = try init(&file, &.{ 2, 4, 6, 10 }, false, 1, testing.allocator);
     defer reader.deinit();
 
     try expectDataMatches(&reader);
@@ -135,7 +134,7 @@ test "fields with CR LF" {
     var file = try std.fs.cwd().openFile(fileName, .{});
     defer file.close();
 
-    var reader = try init(&file, &.{ 2, 4, 6, 10 }, false, 2, hpa);
+    var reader = try init(&file, &.{ 2, 4, 6, 10 }, false, 2, testing.allocator);
     defer reader.deinit();
 
     try expectDataMatches(&reader);
@@ -148,7 +147,7 @@ test "fields with CR LF exept last line" {
     var file = try std.fs.cwd().openFile(fileName, .{});
     defer file.close();
 
-    var reader = try init(&file, &.{ 2, 4, 6, 10 }, false, 2, hpa);
+    var reader = try init(&file, &.{ 2, 4, 6, 10 }, false, 2, testing.allocator);
     defer reader.deinit();
 
     try expectDataMatches(&reader);
@@ -161,7 +160,7 @@ test "fields trimmed" {
     var file = try std.fs.cwd().openFile(fileName, .{});
     defer file.close();
 
-    var reader = try init(&file, &.{ 2, 4, 6, 10 }, true, 0, hpa);
+    var reader = try init(&file, &.{ 2, 4, 6, 10 }, true, 0, testing.allocator);
     defer reader.deinit();
 
     try expectEqualStringsArray(&[_][]const u8{ "A", "B", "C", "D" }, (try reader.getFields()).?);
