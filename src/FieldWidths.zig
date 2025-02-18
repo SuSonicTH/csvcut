@@ -1,5 +1,4 @@
 const std = @import("std");
-const CsvLine = @import("CsvLine").CsvLine;
 const OutputFormat = @import("options.zig").OutputFormat;
 const escape = @import("FormatWriter/escape.zig");
 const Fields = @import("Aggregate.zig").Fields;
