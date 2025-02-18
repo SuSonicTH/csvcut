@@ -213,7 +213,7 @@ pub const Filter = struct {
         };
     }
 
-    pub fn deinit(self: *Filter) !void {
+    pub fn deinit(self: *Filter) void {
         self.selectionList.deinit();
         self.values.deinit();
     }
