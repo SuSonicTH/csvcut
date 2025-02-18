@@ -16,7 +16,7 @@ inline fn escape(field: []const u8, comptime specialCharacters: []const u8) ![]c
         if (std.mem.indexOfScalar(u8, specialCharacters, c)) |pos| {
             _ = pos;
             if (offset == 0) {
-                @memcpy(&escapeBuffer, field[0..i]);
+                @memcpy(escapeBuffer[0..i], field[0..i]);
             }
             escapeBuffer[i + offset] = '\\';
             offset += 1;
