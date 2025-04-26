@@ -11,9 +11,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const src = std.fs.cwd().openDir("./src", .{}) catch @panic("could not get ./src/ dir");
+    std.fs.cwd().copyFile("./LICENSE.txt", src, "LICENSE.txt", .{}) catch @panic("could not copy ./LICENSE.txt to ./src/LICENSE.txt");
+
     if (optimize != .Debug) {
         exe.root_module.strip = true;
-        exe.root_module.single_threaded = true;
     }
 
     b.installArtifact(exe);

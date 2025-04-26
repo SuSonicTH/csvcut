@@ -5,3 +5,4 @@ zig-out
 /*.html
 *.config
 .gitconfig
+src/LICENSE.txt

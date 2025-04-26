@@ -167,6 +167,10 @@ fn processHeader(fieldReader: anytype) !?std.ArrayList([]const u8) {
     fieldReader.setFilters(options.filters);
     fieldReader.setFiltersOut(options.filtersOut);
 
+    if (options.fileHeader) {
+        options.header = try fieldReader.readLine();
+    }
+
     if (options.header != null and options.outputHeader) {
         var header = std.ArrayList([]const u8).init(allocator);
         if (try fieldReader.getSelectedFields(options.header.?)) |selectedHeader| {
