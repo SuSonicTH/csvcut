@@ -60,10 +60,15 @@ pub fn reset(self: *Self) void {
 // Tests
 
 const testing = std.testing;
-const testUtils = @import("testUtils.zig");
 
-const writeFile = testUtils.writeFile;
-const fileName: []const u8 = "./test/MemMappedLineReaderTest.txt";
+fn writeFile(file_path: []const u8, data: []const u8) !void {
+    const file = try std.fs.cwd().createFile(file_path, .{});
+    defer file.close();
+
+    try file.writeAll(data);
+}
+
+const fileName: []const u8 = "test/MemMappedLineReaderTest.txt";
 
 test "file with LF" {
     try writeFile(fileName, "one\ntwo\nthree\n");

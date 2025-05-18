@@ -1,5 +1,5 @@
 const std = @import("std");
-const CsvLine = @import("CsvLine.zig");
+const CsvLine = @import("FieldReader/CsvLine.zig");
 
 pub const OutputFormat = enum {
     csv,

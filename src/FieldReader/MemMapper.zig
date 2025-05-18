@@ -87,9 +87,13 @@ const CloseHandle = windows.CloseHandle;
 // Test
 
 const testing = std.testing;
-const testUtils = @import("testUtils.zig");
 
-const writeFile = testUtils.writeFile;
+pub fn writeFile(file_path: []const u8, data: []const u8) !void {
+    const file = try std.fs.cwd().createFile(file_path, .{});
+    defer file.close();
+
+    try file.writeAll(data);
+}
 
 test "simple mapping for reading" {
     const message = "This is a Test";

@@ -6,7 +6,7 @@ const ArgumentParser = @import("arguments.zig").Parser;
 const Utf8Output = @import("Utf8Output.zig");
 const FormatWriter = @import("FormatWriter.zig").FormatWriter;
 const FieldWidths = @import("FieldWidths.zig");
-const CsvReader = @import("CsvReader.zig");
+const FieldReader = @import("FieldReader.zig");
 const config = @import("config.zig");
 
 const Aggregate = @import("Aggregate.zig");
@@ -68,15 +68,9 @@ fn _main() !void {
         var file = std.fs.cwd().openFile(fileName, .{}) catch |err| ExitCode.couldNotOpenInputFile.printErrorAndExit(.{ fileName, err });
         defer file.close();
 
-        if (options.lengths) |lengths| {
-            //re-implement
-            _ = lengths;
-            return error.FieldWidthsNotReImplementedYet;
-        } else {
-            var csvReader = try CsvReader.init(&file, options.inputLimit, options.skipLine, .{ .separator = options.inputSeparator[0], .trim = options.trim, .quoute = if (options.inputQuoute) |quote| quote[0] else null }, allocator);
-            defer csvReader.deinit();
-            try proccessFile(&csvReader, outputFile);
-        }
+        var fieldReader = try initFileReader(&file);
+        defer fieldReader.deinit();
+        try proccessFile(&fieldReader, outputFile);
     }
 
     if (options.time) {
@@ -95,6 +89,14 @@ fn castArgs(args: [][:0]u8) ![][]const u8 {
         ret[i] = arg[0..];
     }
     return ret;
+}
+
+fn initFileReader(file: *std.fs.File) !FieldReader {
+    if (options.lengths) |lengths| {
+        return try FieldReader.initFixedReader(file, options.inputLimit, options.skipLine, lengths.items, options.trim, options.extraLineEnd, allocator);
+    } else {
+        return try FieldReader.initCsvReader(file, options.inputLimit, options.skipLine, .{ .separator = options.inputSeparator[0], .trim = options.trim, .quoute = if (options.inputQuoute) |quote| quote[0] else null }, allocator);
+    }
 }
 
 const OutputWriter = struct {
@@ -226,21 +228,18 @@ fn listHeader() !void {
     if (options.header) |header| {
         try printHeader(header);
     } else {
-        //try ArgumentParser.validateArguments(&options);
-        //
-        //const fileName = options.inputFiles.items[0];
-        //var file = std.fs.cwd().openFile(fileName, .{}) catch |err| ExitCode.couldNotOpenInputFile.printErrorAndExit(.{ fileName, err });
-        //defer file.close();
-        //
-        //var fieldReader: FieldReader = try FieldReader.initCsvFile(&file, options.inputLimit, options.skipLine, .{ .separator = options.inputSeparator[0], .trim = options.trim, .quoute = if (options.inputQuoute) |quote| quote[0] else null }, allocator);
-        //defer fieldReader.deinit();
-        //
-        //if (try fieldReader.readLine()) |header| {
-        //    try printHeader(header);
-        //} else {
-        //    ExitCode.couldNotReadHeader.printErrorAndExit(.{fileName});
-        //}
-        return error.listHeaderNotYetImplemented;
+        const fileName = options.inputFiles.items[0];
+        var file = std.fs.cwd().openFile(fileName, .{}) catch |err| ExitCode.couldNotOpenInputFile.printErrorAndExit(.{ fileName, err });
+        defer file.close();
+
+        var fieldReader = try initFileReader(&file);
+        defer fieldReader.deinit();
+
+        if (try fieldReader.readLine()) |header| {
+            try printHeader(header);
+        } else {
+            ExitCode.couldNotReadHeader.printErrorAndExit(.{fileName});
+        }
     }
 }
 

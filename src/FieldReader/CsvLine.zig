@@ -125,8 +125,14 @@ fn next_separator(line: []const u8, start: usize, separator: u8) usize {
 // Tests
 
 const testing = std.testing;
-const testUtils = @import("testUtils.zig");
-const expectEqualStringsArray = testUtils.expectEqualStringsArray;
+
+fn expectEqualStringsArray(expected: []const []const u8, actual: [][]const u8) !void {
+    try testing.expect(expected.len <= actual.len);
+    for (expected, 0..) |exp, idx| {
+        try testing.expectEqualStrings(exp, actual[idx]);
+    }
+    try testing.expectEqual(expected.len, actual.len);
+}
 
 test "basic parsing" {
     var csvLine = try init(testing.allocator, .{});
