@@ -97,7 +97,7 @@ function build_platform() {
             zip a ../../bin/csvcut-${PLAT}.zip csvcut.exe > /dev/null
             cd ../../
         else 
-            tar -czf ./bin/csvcut-${PLAT}.tgz -C zig-out/bin/ csvcut
+            gzip -c zig-out/bin/csvcut > ./bin/csvcut-${PLAT}.gz
         fi
     fi
 }
