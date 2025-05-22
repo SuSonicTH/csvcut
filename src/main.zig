@@ -70,6 +70,7 @@ fn _main() !void {
 
         var fieldReader = try initFileReader(&file);
         defer fieldReader.deinit();
+
         try proccessFile(&fieldReader, outputFile);
     }
 
@@ -163,15 +164,15 @@ fn proccessFile(fieldReader: anytype, outputFile: std.fs.File) !void {
 }
 
 fn processHeader(fieldReader: anytype) !?std.ArrayList([]const u8) {
+    if (options.fileHeader) {
+        options.header = try fieldReader.readLine();
+    }
+
     try options.calculateFieldIndices();
     try fieldReader.setSelectedIndices(options.selectedIndices);
     fieldReader.setExcludedIndices(options.excludedIndices);
     fieldReader.setFilters(options.filters);
     fieldReader.setFiltersOut(options.filtersOut);
-
-    if (options.fileHeader) {
-        options.header = try fieldReader.readLine();
-    }
 
     if (options.header != null and options.outputHeader) {
         var header = std.ArrayList([]const u8).init(allocator);
