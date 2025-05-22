@@ -33,7 +33,6 @@ const Argument = enum {
     @"--format",
     @"-l",
     @"--listHeader",
-    @"--stdin",
     @"--skipLines",
     @"--exitCodes",
     @"--unique",
@@ -147,8 +146,6 @@ pub const Parser = struct {
                         try options.addFilterOut(try argumentValue(args, index, arg));
                         skipNext();
                     },
-
-                    .@"--stdin" => options.useStdin = true,
                     .@"--skipLines" => {
                         try options.addSkipLines(try argumentValue(args, index, arg));
                         skipNext();
@@ -233,15 +230,6 @@ pub const Parser = struct {
     }
 
     pub fn validateArguments(options: *Options) !void {
-        try checkInputFileGiven(options);
         if (options.lengths == null and (options.extraLineEnd > 0)) ExitCode.extraLfWithoutLength.printErrorAndExit(.{});
-    }
-
-    pub fn checkInputFileGiven(options: *Options) !void {
-        if (!options.useStdin and options.inputFiles.items.len == 0) {
-            try ExitCode.noInputError.printErrorAndExit(.{});
-        } else if (options.useStdin and options.inputFiles.items.len > 0) {
-            try ExitCode.stdinOrFileError.printErrorAndExit(.{});
-        }
     }
 };

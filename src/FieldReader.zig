@@ -1,10 +1,46 @@
 const std = @import("std");
-const LineReader = @import("LineReader").LineReader;
-const CsvLine = @import("CsvLine");
+
+const CsvReader = @import("FieldReader/CsvReader.zig");
 const Filter = @import("options.zig").Filter;
-const MemMapper = @import("MemMapper").MemMapper;
+const CsvLine = @import("FieldReader/CsvLine.zig");
+
+const FixedReader = @import("FieldReader/FixedReader.zig");
+
+pub const FieldReader = union(enum) {
+    csvReader: CsvReader,
+    fixedReader: FixedReader,
+
+    pub fn initCsvReader(file: *std.fs.File, csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !FieldReader {
+        return .{ .csvReader = try CsvReader.init(file, csvLineOptions, allocator) };
+    }
+
+    pub fn initFixedReader(file: *std.fs.File, widhts: []const usize, trim: bool, extraLineEnd: u2, allocator: std.mem.Allocator) !FieldReader {
+        return .{ .fixedReader = try FixedReader.init(file, widhts, trim, extraLineEnd, allocator) };
+    }
+
+    pub fn deinit(self: *FieldReader) void {
+        switch (self.*) {
+            inline else => |*fieldReader| fieldReader.deinit(),
+        }
+    }
+
+    pub fn reset(self: *FieldReader) void {
+        switch (self.*) {
+            inline else => |*fieldReader| fieldReader.reset(),
+        }
+    }
+
+    fn getFields(self: *FieldReader) !?[][]const u8 {
+        switch (self.*) {
+            inline else => |*fieldReader| return fieldReader.getFields(),
+        }
+    }
+};
+
+const Self = @This();
 
 allocator: std.mem.Allocator,
+fieldReader: FieldReader,
 inputLimit: usize,
 skipLine: ?std.AutoHashMap(usize, bool),
 lineNumber: usize = 0,
@@ -14,40 +50,19 @@ excludedIndices: ?std.AutoHashMap(usize, bool) = null,
 selected: ?[][]const u8 = null,
 filters: ?std.ArrayList(Filter) = null,
 filtersOut: ?std.ArrayList(Filter) = null,
-readerImpl: ReaderImpl,
 
-const Self = @This();
-
-pub fn initCsvFile(file: *std.fs.File, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !Self {
+pub fn initCsvReader(file: *std.fs.File, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !Self {
     return .{
-        .readerImpl = try ReaderImpl.initCsvFile(file, csvLineOptions, allocator),
+        .fieldReader = try FieldReader.initCsvReader(file, csvLineOptions, allocator),
         .allocator = allocator,
         .inputLimit = inputLimit,
         .skipLine = skipLine,
     };
 }
 
-pub fn initCsvReader(reader: std.io.AnyReader, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !Self {
+pub fn initFixedReader(file: *std.fs.File, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), widhts: []const usize, trim: bool, extraLineEnd: u2, allocator: std.mem.Allocator) !Self {
     return .{
-        .readerImpl = try ReaderImpl.initCsvReader(reader, csvLineOptions, allocator),
-        .allocator = allocator,
-        .inputLimit = inputLimit,
-        .skipLine = skipLine,
-    };
-}
-
-pub fn initWidthFile(file: *std.fs.File, widhts: []usize, trim: bool, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), extraLineEnd: u2, allocator: std.mem.Allocator) !Self {
-    return .{
-        .readerImpl = try ReaderImpl.initWidthFile(file, widhts, trim, extraLineEnd, allocator),
-        .allocator = allocator,
-        .inputLimit = inputLimit,
-        .skipLine = skipLine,
-    };
-}
-
-pub fn initWidthReader(reader: std.io.AnyReader, widhts: []usize, trim: bool, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), extraLineEnd: u2, allocator: std.mem.Allocator) !Self {
-    return .{
-        .readerImpl = try ReaderImpl.initWidthReader(reader, widhts, trim, extraLineEnd, allocator),
+        .fieldReader = try FieldReader.initFixedReader(file, widhts, trim, extraLineEnd, allocator),
         .allocator = allocator,
         .inputLimit = inputLimit,
         .skipLine = skipLine,
@@ -55,16 +70,16 @@ pub fn initWidthReader(reader: std.io.AnyReader, widhts: []usize, trim: bool, in
 }
 
 pub fn deinit(self: *Self) void {
-    self.readerImpl.deinit();
+    self.fieldReader.deinit();
     if (self.selected != null) {
         self.allocator.free(self.selected.?);
     }
 }
 
-pub fn reset(self: *Self) !void {
+pub fn reset(self: *Self) void {
     self.lineNumber = 0;
     self.linesRead = 0;
-    try self.readerImpl.reset();
+    self.fieldReader.reset();
 }
 
 pub fn resetLinesRead(self: *Self) void {
@@ -107,7 +122,7 @@ pub inline fn readLine(self: *Self) !?[][]const u8 {
         self.lineNumber += 1;
         self.linesRead += 1;
 
-        if (try self.readerImpl.getFields()) |fields| {
+        if (try self.fieldReader.getFields()) |fields| {
             if (self.noFilterOrfilterMatches(fields)) {
                 return self.getSelectedFields(fields);
             }
@@ -118,13 +133,13 @@ pub inline fn readLine(self: *Self) !?[][]const u8 {
 }
 
 pub inline fn skipOneLine(self: *Self) !void {
-    _ = try self.readerImpl.getFields();
+    _ = try self.fieldReader.getFields();
 }
 
 inline fn skipLines(self: *Self) !void {
     if (self.skipLine != null) {
         while (self.skipLine.?.get(self.lineNumber) != null) {
-            try self.readerImpl.skipLine();
+            try self.skipOneLine();
             self.lineNumber += 1;
             self.linesRead += 1;
         }
@@ -179,290 +194,280 @@ pub inline fn getSelectedFields(self: *Self, fields: [][]const u8) !?[][]const u
     }
 }
 
-const ReaderImpl = union(enum) {
-    csvFile: CsvFileReader,
-    csvReader: CsvReader,
-    widthFile: WidthFileReader,
-    widthReader: WidthReader,
+// Tests
 
-    fn initCsvFile(file: *std.fs.File, csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !ReaderImpl {
-        return .{
-            .csvFile = try CsvFileReader.init(file, csvLineOptions, allocator),
-        };
+const testing = std.testing;
+
+fn expectEqualStringsArray(expected: []const []const u8, actual: [][]const u8) !void {
+    try testing.expect(expected.len <= actual.len);
+    for (expected, 0..) |exp, idx| {
+        try testing.expectEqualStrings(exp, actual[idx]);
     }
-
-    fn initCsvReader(reader: std.io.AnyReader, csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !ReaderImpl {
-        return .{
-            .csvReader = try CsvReader.init(reader, csvLineOptions, allocator),
-        };
-    }
-
-    fn initWidthFile(file: *std.fs.File, widhts: []usize, trim: bool, extraLineEnd: u2, allocator: std.mem.Allocator) !ReaderImpl {
-        return .{
-            .widthFile = try WidthFileReader.init(file, widhts, trim, extraLineEnd, allocator),
-        };
-    }
-
-    fn initWidthReader(reader: std.io.AnyReader, widhts: []usize, trim: bool, extraLineEnd: u2, allocator: std.mem.Allocator) !ReaderImpl {
-        return .{
-            .widthReader = try WidthReader.init(reader, widhts, trim, extraLineEnd, allocator),
-        };
-    }
-
-    pub fn deinit(self: *ReaderImpl) void {
-        switch (self.*) {
-            inline else => |*readerImpl| readerImpl.deinit(),
-        }
-    }
-
-    pub fn reset(self: *ReaderImpl) !void {
-        switch (self.*) {
-            inline else => |*readerImpl| try readerImpl.reset(),
-        }
-    }
-
-    pub fn skipLine(self: *ReaderImpl) !void {
-        switch (self.*) {
-            inline else => |*readerImpl| try readerImpl.skipLine(),
-        }
-    }
-
-    pub fn getFields(self: *ReaderImpl) !?[][]const u8 {
-        switch (self.*) {
-            inline else => |*readerImpl| return try readerImpl.getFields(),
-        }
-    }
-};
-
-const CsvFileReader = struct {
-    lineReader: LineReader,
-    csvLine: ?CsvLine.CsvLine = null,
-
-    fn init(file: *std.fs.File, csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !CsvFileReader {
-        var ret: CsvFileReader = .{
-            .lineReader = try LineReader.initFile(file, allocator, .{}),
-        };
-
-        errdefer ret.lineReader.deinit();
-        ret.csvLine = try CsvLine.CsvLine.init(allocator, csvLineOptions);
-        return ret;
-    }
-
-    fn deinit(self: *CsvFileReader) void {
-        self.lineReader.deinit();
-        if (self.csvLine != null) {
-            self.csvLine.?.free();
-        }
-    }
-
-    fn reset(self: *CsvFileReader) !void {
-        try self.lineReader.reset();
-    }
-
-    fn skipLine(self: *CsvFileReader) !void {
-        _ = try self.lineReader.readLine();
-    }
-
-    fn getFields(self: *CsvFileReader) !?[][]const u8 {
-        if (try self.lineReader.readLine()) |line| {
-            return try self.csvLine.?.parse(line);
-        }
-        return null;
-    }
-};
-
-const CsvReader = struct {
-    lineReader: LineReader,
-    csvLine: CsvLine.CsvLine = undefined,
-
-    fn init(reader: std.io.AnyReader, csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !CsvReader {
-        var csvReader: CsvReader = .{
-            .lineReader = try LineReader.initReader(reader, allocator, .{}),
-        };
-        errdefer csvReader.lineReader.deinit();
-        csvReader.csvLine = try CsvLine.CsvLine.init(allocator, csvLineOptions);
-        return csvReader;
-    }
-
-    fn deinit(self: *CsvReader) void {
-        self.csvLine.free();
-    }
-
-    fn reset(self: *CsvReader) !void {
-        try self.lineReader.reset();
-    }
-
-    fn skipLine(self: *CsvReader) !void {
-        _ = try self.lineReader.readLine();
-    }
-
-    fn getFields(self: *CsvReader) !?[][]const u8 {
-        if (try self.lineReader.readLine()) |line| {
-            return try self.csvLine.parse(line);
-        }
-        return null;
-    }
-};
-
-const FieldProperty = struct {
-    pos: usize,
-    length: usize,
-};
-
-fn calculateFieldProperties(widhts: []usize, recordSize: *usize, allocator: std.mem.Allocator) ![]FieldProperty {
-    var fieldProperties = try allocator.alloc(FieldProperty, widhts.len);
-    var start: usize = 0;
-    for (widhts, 0..) |width, i| {
-        fieldProperties[i].pos = start;
-        fieldProperties[i].length = width;
-        start += width;
-    }
-    recordSize.* = start;
-    return fieldProperties[0..widhts.len];
+    try testing.expectEqual(expected.len, actual.len);
 }
 
-const WidthFileReader = struct {
-    allocator: std.mem.Allocator,
-    memMapper: MemMapper,
-    trim: bool,
-    data: []u8 = undefined,
-    fieldProperties: ?[]FieldProperty = null,
-    recordSize: usize = 0,
-    fields: ?[][]const u8 = undefined,
-    pos: usize = 0,
-    extraLineEnd: u2,
+fn writeFile(file_path: []const u8, data: []const u8) !void {
+    const file = try std.fs.cwd().createFile(file_path, .{});
+    defer file.close();
 
-    fn init(file: *std.fs.File, widhts: []usize, trim: bool, extraLineEnd: u2, allocator: std.mem.Allocator) !WidthFileReader {
-        var reader: WidthFileReader = .{
-            .allocator = allocator,
-            .memMapper = try MemMapper.init(file.*, false),
-            .trim = trim,
-            .extraLineEnd = extraLineEnd,
-        };
-        errdefer reader.deinit();
-        reader.data = try reader.memMapper.map(u8, .{});
-        reader.fieldProperties = try calculateFieldProperties(widhts, &reader.recordSize, allocator);
-        reader.fields = try allocator.alloc([]const u8, widhts.len);
-        return reader;
+    try file.writeAll(data);
+}
+
+const fileName: []const u8 = "./test/CsvReaderTest.csv";
+var fileWritten: bool = false;
+
+const HEADER = &[_][]const u8{ "ONE", "TWO", "THREE", "FOUR" };
+const LINE_1 = &[_][]const u8{ "11", "12", "13", "14" };
+const LINE_2 = &[_][]const u8{ "21", "22", "23", "24" };
+const LINE_3 = &[_][]const u8{ "31", "32", "33", "34" };
+const LINE_4 = &[_][]const u8{ "41", "42", "43", "44" };
+
+fn writeTestFile() !void {
+    if (!fileWritten) {
+        try writeFile(fileName, "ONE,TWO,THREE,FOUR\n" ++
+            "11,12,13,14\n" ++
+            "21,22,23,24\n" ++
+            "31,32,33,34\n" ++
+            "41,42,43,44\n");
+        fileWritten = true;
     }
+}
 
-    fn deinit(self: *WidthFileReader) void {
-        self.memMapper.unmap(self.data);
-        self.memMapper.deinit();
-        if (self.fieldProperties) |properties| {
-            self.allocator.free(properties);
-        }
-        if (self.fields) |fields| {
-            self.allocator.free(fields);
-        }
-    }
+test "unfiltered reading" {
+    try writeTestFile();
+    var file = try std.fs.cwd().openFile(fileName, .{});
+    defer file.close();
 
-    fn reset(self: *WidthFileReader) !void {
-        self.pos = 0;
-    }
+    var reader = try initCsvReader(&file, 0, null, .{}, testing.allocator);
+    defer reader.deinit();
 
-    fn skipLine(self: *WidthFileReader) !void {
-        _ = try self.readLine();
-    }
+    try expectEqualStringsArray(HEADER, (try reader.readLine()).?);
+    try expectEqualStringsArray(LINE_1, (try reader.readLine()).?);
+    try expectEqualStringsArray(LINE_2, (try reader.readLine()).?);
+    try expectEqualStringsArray(LINE_3, (try reader.readLine()).?);
+    try expectEqualStringsArray(LINE_4, (try reader.readLine()).?);
+    try testing.expectEqual(null, try reader.readLine());
+}
 
-    inline fn readLine(self: *WidthFileReader) !?[]const u8 {
-        if (self.pos + self.recordSize <= self.data.len) {
-            const current = self.pos;
-            self.pos += self.recordSize + self.extraLineEnd;
-            return self.data[current .. current + self.recordSize];
-        }
-        return null;
-    }
+test "input limit 1" {
+    try writeTestFile();
+    var file = try std.fs.cwd().openFile(fileName, .{});
+    defer file.close();
 
-    fn getFields(self: *WidthFileReader) !?[][]const u8 {
-        if (try self.readLine()) |line| {
-            for (self.fieldProperties.?, 0..) |property, i| {
-                if (self.trim) {
-                    self.fields.?[i] = std.mem.trim(u8, line[property.pos .. property.pos + property.length], " \t");
-                } else {
-                    self.fields.?[i] = line[property.pos .. property.pos + property.length];
-                }
-            }
-            return self.fields;
-        }
-        return null;
-    }
-};
+    var reader = try initCsvReader(&file, 1, null, .{}, testing.allocator);
+    defer reader.deinit();
 
-const WidthReader = struct {
-    allocator: std.mem.Allocator,
-    reader: std.io.AnyReader,
-    trim: bool,
-    fieldProperties: ?[]FieldProperty = null,
-    recordSize: usize = 0,
-    fields: [][]const u8,
-    data: ?[]u8 = null,
-    pos: usize = 0,
-    end: usize = 0,
-    extraLineEnd: u2,
+    try expectEqualStringsArray(HEADER, (try reader.readLine()).?);
+    try testing.expectEqual(null, try reader.readLine());
+}
 
-    fn init(anyReader: std.io.AnyReader, widhts: []usize, trim: bool, extraLineEnd: u2, allocator: std.mem.Allocator) !WidthReader {
-        var reader: WidthReader = .{
-            .allocator = allocator,
-            .reader = anyReader,
-            .trim = trim,
-            .fields = try allocator.alloc([]const u8, widhts.len),
-            .extraLineEnd = extraLineEnd,
-        };
-        errdefer reader.deinit();
-        reader.fieldProperties = try calculateFieldProperties(widhts, &reader.recordSize, allocator);
-        reader.data = try allocator.alloc(u8, (reader.recordSize + extraLineEnd) * 100);
-        _ = try reader.fillBuffer();
-        return reader;
-    }
+test "input limit 3" {
+    try writeTestFile();
+    var file = try std.fs.cwd().openFile(fileName, .{});
+    defer file.close();
 
-    fn deinit(self: *WidthReader) void {
-        self.allocator.free(self.fields);
-        if (self.fieldProperties) |properties| {
-            self.allocator.free(properties);
-        }
-        if (self.data) |records| {
-            self.allocator.free(records);
-        }
-    }
+    var reader = try initCsvReader(&file, 3, null, .{}, testing.allocator);
+    defer reader.deinit();
 
-    inline fn fillBuffer(self: *WidthReader) !bool {
-        self.pos = 0;
-        self.end = try self.reader.readAll(self.data.?);
-        return self.end >= self.recordSize;
-    }
+    try expectEqualStringsArray(HEADER, (try reader.readLine()).?);
+    try expectEqualStringsArray(LINE_1, (try reader.readLine()).?);
+    try expectEqualStringsArray(LINE_2, (try reader.readLine()).?);
+    try testing.expectEqual(null, try reader.readLine());
+}
 
-    fn reset(self: *WidthReader) !void {
-        _ = self;
-        return error.Unsupported;
-    }
+test "skip lines 2 & 3" {
+    try writeTestFile();
+    var file = try std.fs.cwd().openFile(fileName, .{});
+    defer file.close();
 
-    fn skipLine(self: *WidthReader) !void {
-        _ = try self.readLine();
-    }
+    var skip = std.AutoHashMap(usize, bool).init(testing.allocator);
+    defer skip.deinit();
+    try skip.put(2, true);
+    try skip.put(3, true);
 
-    inline fn readLine(self: *WidthReader) !?[]const u8 {
-        if (self.pos + self.recordSize > self.end) {
-            if (!(try self.fillBuffer())) {
-                return null;
-            }
-        }
-        const current = self.pos;
-        self.pos += self.recordSize + self.extraLineEnd;
-        return self.data.?[current .. current + self.recordSize];
-    }
+    var reader = try initCsvReader(&file, 0, skip, .{}, testing.allocator);
+    defer reader.deinit();
 
-    fn getFields(self: *WidthReader) !?[][]const u8 {
-        if (try self.readLine()) |line| {
-            for (self.fieldProperties.?, 0..) |property, i| {
-                if (self.trim) {
-                    self.fields[i] = std.mem.trim(u8, line[property.pos .. property.pos + property.length], " \t");
-                } else {
-                    self.fields[i] = line[property.pos .. property.pos + property.length];
-                }
-            }
-            return self.fields;
-        }
-        return null;
-    }
-};
+    try expectEqualStringsArray(HEADER, (try reader.readLine()).?);
+    try expectEqualStringsArray(LINE_1, (try reader.readLine()).?);
+    try expectEqualStringsArray(LINE_4, (try reader.readLine()).?);
+    try testing.expectEqual(null, try reader.readLine());
+}
+
+test "reset after 3 lines read" {
+    try writeTestFile();
+    var file = try std.fs.cwd().openFile(fileName, .{});
+    defer file.close();
+
+    var reader = try initCsvReader(&file, 0, null, .{}, testing.allocator);
+    defer reader.deinit();
+
+    try expectEqualStringsArray(HEADER, (try reader.readLine()).?);
+    try expectEqualStringsArray(LINE_1, (try reader.readLine()).?);
+    try expectEqualStringsArray(LINE_2, (try reader.readLine()).?);
+    reader.reset();
+
+    try expectEqualStringsArray(HEADER, (try reader.readLine()).?);
+    try expectEqualStringsArray(LINE_1, (try reader.readLine()).?);
+    try expectEqualStringsArray(LINE_2, (try reader.readLine()).?);
+    try expectEqualStringsArray(LINE_3, (try reader.readLine()).?);
+    try expectEqualStringsArray(LINE_4, (try reader.readLine()).?);
+    try testing.expectEqual(null, try reader.readLine());
+}
+
+test "input limit 3 reasetLinesRead after header" {
+    try writeTestFile();
+    var file = try std.fs.cwd().openFile(fileName, .{});
+    defer file.close();
+
+    var reader = try initCsvReader(&file, 3, null, .{}, testing.allocator);
+    defer reader.deinit();
+
+    try expectEqualStringsArray(HEADER, (try reader.readLine()).?);
+    reader.resetLinesRead();
+
+    try expectEqualStringsArray(LINE_1, (try reader.readLine()).?);
+    try expectEqualStringsArray(LINE_2, (try reader.readLine()).?);
+    try expectEqualStringsArray(LINE_3, (try reader.readLine()).?);
+    try testing.expectEqual(null, try reader.readLine());
+}
+
+test "skipOneLine" {
+    try writeTestFile();
+    var file = try std.fs.cwd().openFile(fileName, .{});
+    defer file.close();
+
+    var reader = try initCsvReader(&file, 0, null, .{}, testing.allocator);
+    defer reader.deinit();
+
+    try expectEqualStringsArray(HEADER, (try reader.readLine()).?);
+    try expectEqualStringsArray(LINE_1, (try reader.readLine()).?);
+    try reader.skipOneLine();
+    try expectEqualStringsArray(LINE_3, (try reader.readLine()).?);
+    try expectEqualStringsArray(LINE_4, (try reader.readLine()).?);
+    try testing.expectEqual(null, try reader.readLine());
+}
+
+test "selected indices 1,2" {
+    try writeTestFile();
+    var file = try std.fs.cwd().openFile(fileName, .{});
+    defer file.close();
+
+    var reader = try initCsvReader(&file, 0, null, .{}, testing.allocator);
+    defer reader.deinit();
+
+    var selected: [2]usize = .{ 1, 2 };
+    try reader.setSelectedIndices(&selected);
+
+    try expectEqualStringsArray(&[_][]const u8{ "TWO", "THREE" }, (try reader.readLine()).?);
+    try expectEqualStringsArray(&[_][]const u8{ "12", "13" }, (try reader.readLine()).?);
+    try expectEqualStringsArray(&[_][]const u8{ "22", "23" }, (try reader.readLine()).?);
+    try expectEqualStringsArray(&[_][]const u8{ "32", "33" }, (try reader.readLine()).?);
+    try expectEqualStringsArray(&[_][]const u8{ "42", "43" }, (try reader.readLine()).?);
+    try testing.expectEqual(null, try reader.readLine());
+}
+
+test "selected indices 2,1,0" {
+    try writeTestFile();
+    var file = try std.fs.cwd().openFile(fileName, .{});
+    defer file.close();
+
+    var reader = try initCsvReader(&file, 0, null, .{}, testing.allocator);
+    defer reader.deinit();
+
+    var selected: [3]usize = .{ 2, 1, 0 };
+    try reader.setSelectedIndices(&selected);
+
+    try expectEqualStringsArray(&[_][]const u8{ "THREE", "TWO", "ONE" }, (try reader.readLine()).?);
+    try expectEqualStringsArray(&[_][]const u8{ "13", "12", "11" }, (try reader.readLine()).?);
+    try expectEqualStringsArray(&[_][]const u8{ "23", "22", "21" }, (try reader.readLine()).?);
+    try expectEqualStringsArray(&[_][]const u8{ "33", "32", "31" }, (try reader.readLine()).?);
+    try expectEqualStringsArray(&[_][]const u8{ "43", "42", "41" }, (try reader.readLine()).?);
+    try testing.expectEqual(null, try reader.readLine());
+}
+
+test "exclude 0,3" {
+    try writeTestFile();
+    var file = try std.fs.cwd().openFile(fileName, .{});
+    defer file.close();
+
+    var reader = try initCsvReader(&file, 0, null, .{}, testing.allocator);
+    defer reader.deinit();
+
+    var exclude = std.AutoHashMap(usize, bool).init(testing.allocator);
+    defer exclude.deinit();
+    try exclude.put(0, true);
+    try exclude.put(3, true);
+    reader.setExcludedIndices(exclude);
+
+    try expectEqualStringsArray(&[_][]const u8{ "TWO", "THREE" }, (try reader.readLine()).?);
+    try expectEqualStringsArray(&[_][]const u8{ "12", "13" }, (try reader.readLine()).?);
+    try expectEqualStringsArray(&[_][]const u8{ "22", "23" }, (try reader.readLine()).?);
+    try expectEqualStringsArray(&[_][]const u8{ "32", "33" }, (try reader.readLine()).?);
+    try expectEqualStringsArray(&[_][]const u8{ "42", "43" }, (try reader.readLine()).?);
+    try testing.expectEqual(null, try reader.readLine());
+}
+
+test "Filter A" {
+    try writeFile(fileName, "ONE,TWO,THREE,FOUR\n" ++
+        "A,12,13,14\n" ++
+        "B,22,23,24\n" ++
+        "A,32,33,34\n" ++
+        "B,42,43,44\n");
+    fileWritten = false;
+
+    var file = try std.fs.cwd().openFile(fileName, .{});
+    defer file.close();
+
+    var reader = try initCsvReader(&file, 0, null, .{}, testing.allocator);
+    defer reader.deinit();
+
+    const header = try testing.allocator.dupe([]const u8, (try reader.readLine()).?);
+    defer testing.allocator.free(header);
+
+    //setup filter
+    var filterList = std.ArrayList(Filter).init(testing.allocator);
+    defer filterList.deinit();
+    var filter = try Filter.init(testing.allocator);
+    defer filter.deinit();
+    try filter.append("ONE=A");
+    try filter.calculateIndices(header);
+    try filterList.append(filter);
+    reader.setFilters(filterList);
+
+    try expectEqualStringsArray(&[_][]const u8{ "A", "12", "13", "14" }, (try reader.readLine()).?);
+    try expectEqualStringsArray(&[_][]const u8{ "A", "32", "33", "34" }, (try reader.readLine()).?);
+    try testing.expectEqual(null, try reader.readLine());
+}
+
+test "FilterOut A" {
+    try writeFile(fileName, "ONE,TWO,THREE,FOUR\n" ++
+        "A,12,13,14\n" ++
+        "B,22,23,24\n" ++
+        "A,32,33,34\n" ++
+        "B,42,43,44\n");
+    fileWritten = false;
+
+    var file = try std.fs.cwd().openFile(fileName, .{});
+    defer file.close();
+
+    var reader = try initCsvReader(&file, 0, null, .{}, testing.allocator);
+    defer reader.deinit();
+
+    const header = try testing.allocator.dupe([]const u8, (try reader.readLine()).?);
+    defer testing.allocator.free(header);
+
+    //setup filter
+    var filterList = std.ArrayList(Filter).init(testing.allocator);
+    defer filterList.deinit();
+    var filter = try Filter.init(testing.allocator);
+    defer filter.deinit();
+    try filter.append("ONE=A");
+    try filter.calculateIndices(header);
+    try filterList.append(filter);
+    reader.setFiltersOut(filterList);
+
+    try expectEqualStringsArray(&[_][]const u8{ "B", "22", "23", "24" }, (try reader.readLine()).?);
+    try expectEqualStringsArray(&[_][]const u8{ "B", "42", "43", "44" }, (try reader.readLine()).?);
+    try testing.expectEqual(null, try reader.readLine());
+}

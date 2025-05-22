@@ -4,21 +4,6 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const lineReader = b.dependency("LineReader", .{
-        .target = target,
-        .optimize = optimize,
-    });
-
-    const csvLine = b.dependency("CsvLine", .{
-        .target = target,
-        .optimize = optimize,
-    });
-
-    const memMapper = b.dependency("MemMapper", .{
-        .target = target,
-        .optimize = optimize,
-    });
-
     const exe = b.addExecutable(.{
         .name = "csvcut",
         .root_source_file = b.path("src/main.zig"),
@@ -26,13 +11,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    exe.root_module.addImport("LineReader", lineReader.module("LineReader"));
-    exe.root_module.addImport("CsvLine", csvLine.module("CsvLine"));
-    exe.root_module.addImport("MemMapper", memMapper.module("MemMapper"));
+    const src = std.fs.cwd().openDir("./src", .{}) catch @panic("could not get ./src/ dir");
+    std.fs.cwd().copyFile("./LICENSE.txt", src, "LICENSE.txt", .{}) catch @panic("could not copy ./LICENSE.txt to ./src/LICENSE.txt");
 
     if (optimize != .Debug) {
         exe.root_module.strip = true;
-        exe.root_module.single_threaded = true;
     }
 
     b.installArtifact(exe);
@@ -51,9 +34,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    unit_tests.root_module.addImport("LineReader", lineReader.module("LineReader"));
-    unit_tests.root_module.addImport("CsvLine", csvLine.module("CsvLine"));
-    unit_tests.root_module.addImport("MemMapper", memMapper.module("MemMapper"));
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "Run unit tests");
