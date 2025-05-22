@@ -8,7 +8,7 @@ pub inline fn markdown(field: []const u8) ![]const u8 {
     return try escape(field, "\\`*_{}[]<>()#+-.!|");
 }
 
-var escapeBuffer: [20484]u8 = undefined;
+var escapeBuffer: [10240]u8 = undefined;
 
 inline fn escape(field: []const u8, comptime specialCharacters: []const u8) ![]const u8 {
     var offset: u16 = 0;
@@ -16,7 +16,7 @@ inline fn escape(field: []const u8, comptime specialCharacters: []const u8) ![]c
         if (std.mem.indexOfScalar(u8, specialCharacters, c)) |pos| {
             _ = pos;
             if (offset == 0) {
-                std.mem.copyForwards(u8, &escapeBuffer, field[0..i]);
+                @memcpy(escapeBuffer[0..i], field[0..i]);
             }
             escapeBuffer[i + offset] = '\\';
             offset += 1;
