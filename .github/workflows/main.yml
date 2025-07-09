@@ -13,6 +13,8 @@ jobs:
         uses: mlugg/setup-zig@v2
       - name: Get upx
         uses: samyfodil/upx-action@v1.0.3
+      - name: Install zip
+        run: sudo apt install -y zip
       - name: Run build
         run: ./build.sh --release
       - name: Upload csvcut-x86_64-windows
@@ -33,6 +35,6 @@ jobs:
         uses: actions/upload-artifact@v4.6.2
         with: 
           name: csvcut-aarch64-linux
-          path: ./bin/csvcut-aarch64-linux
+          path: ./bin/csvcut-aarch64-linux.gz
           compression-level: 0
           overwrite: true
