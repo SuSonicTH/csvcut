@@ -13,8 +13,6 @@ jobs:
         uses: mlugg/setup-zig@v2
       - name: Get upx
         uses: samyfodil/upx-action@v1.0.3
-      - name: Install zip
-        run: sudo apt install -y zip
       - name: Run build
         run: ./build.sh --release
       - name: list bin
