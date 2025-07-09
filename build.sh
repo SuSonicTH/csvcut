@@ -51,6 +51,14 @@ while (( "$#" )); do
     esac
 done
 
+case "$(uname -s)" in
+    Linux*)     HOST_OS='linux';;
+    Darwin*)    HOST_OS='mac';;
+    MINGW*)     HOST_OS='windows';;
+    MSYS_NT*)   HOST_OS='windows';;
+    *)          HOST_OS="UNKNOWN:${unameOut}"
+esac
+
 if [ "$CLEAN" == "true" ]; then
     echo cleaning
     rm -fr zig-out .zig-cache >/dev/null 2>&1
@@ -94,7 +102,11 @@ function build_platform() {
         echo packaging $PLAT
         if [ "$SUFFIX" == ".exe" ]; then 
             cd zig-out/bin/
-            zip a ../../bin/csvcut-${PLAT}.zip csvcut.exe > /dev/null
+            if [ "$HOST_OS" == "windows" ]; then
+                zip a ../../bin/csvcut-${PLAT}.zip csvcut.exe > /dev/null
+            else
+                zip ../../bin/csvcut-${PLAT}.zip csvcut.exe > /dev/null
+            fi
             cd ../../
         else 
             gzip -c zig-out/bin/csvcut > ./bin/csvcut-${PLAT}.gz
