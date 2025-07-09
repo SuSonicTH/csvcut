@@ -18,7 +18,7 @@ jobs:
       - name: Run build
         run: ./build.sh --release
       - name: list bin
-        run: ls -la ./bin/
+        run: ls -la ./bin/ ./zig-out/bin/
       - name: Upload csvcut-x86_64-windows
         uses: actions/upload-artifact@v4.6.2
         with: 
