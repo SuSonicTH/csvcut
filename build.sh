@@ -46,7 +46,7 @@ while (( "$#" )); do
         --upx )         UPX="true"; shift;;
         --clean )       CLEAN="true"; shift;;
         --test )        TESTS="true"; shift;;
-        --release )     CLEAN="true"; ALL="true"; UPX="true"; TESTS="true"; RELEASE="true"; shift;;
+        --release )     ALL="true"; UPX="true"; TESTS="true"; RELEASE="true"; shift;;
         * ) exit_argument_error "unknown command $1";;
     esac
 done
