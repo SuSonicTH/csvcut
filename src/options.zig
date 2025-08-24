@@ -40,18 +40,18 @@ pub const Options = struct {
     excludedFields: ?SelectionList = null,
     selectedIndices: ?[]usize = null,
     excludedIndices: ?std.AutoHashMap(usize, bool) = null,
-    filters: ?std.ArrayList(Filter) = null,
-    filtersOut: ?std.ArrayList(Filter) = null,
+    filters: ?std.array_list.Managed(Filter) = null,
+    filtersOut: ?std.array_list.Managed(Filter) = null,
     trim: bool = false,
     outputFormat: OutputFormat = .csv,
     listHeader: bool = false,
-    inputFiles: std.ArrayList([]const u8),
+    inputFiles: std.array_list.Managed([]const u8),
     skipLine: ?std.AutoHashMap(usize, bool) = null,
     unique: bool = false,
     count: bool = false,
     inputLimit: usize = 0,
     outputLimit: usize = 0,
-    lengths: ?std.ArrayList(usize) = null,
+    lengths: ?std.array_list.Managed(usize) = null,
     extraLineEnd: u2 = 0,
     outputName: ?[]const u8 = null,
     time: bool = false,
@@ -59,7 +59,7 @@ pub const Options = struct {
     pub fn init(allocator: std.mem.Allocator) !Options {
         return .{
             .allocator = allocator,
-            .inputFiles = std.ArrayList([]const u8).init(allocator),
+            .inputFiles = std.array_list.Managed([]const u8).init(allocator),
         };
     }
 
@@ -154,7 +154,7 @@ pub const Options = struct {
 
     pub fn addFilter(self: *Options, filterList: []const u8) !void {
         if (self.filters == null) {
-            self.filters = std.ArrayList(Filter).init(self.allocator);
+            self.filters = std.array_list.Managed(Filter).init(self.allocator);
         }
         const list = (try (try self.getCsvLine()).parse(filterList));
 
@@ -166,7 +166,7 @@ pub const Options = struct {
 
     pub fn addFilterOut(self: *Options, filterList: []const u8) !void {
         if (self.filtersOut == null) {
-            self.filtersOut = std.ArrayList(Filter).init(self.allocator);
+            self.filtersOut = std.array_list.Managed(Filter).init(self.allocator);
         }
         const list = (try (try self.getCsvLine()).parse(filterList));
 
@@ -195,7 +195,7 @@ pub const Options = struct {
     }
 
     pub fn setLenghts(self: *Options, value: []const u8) !void {
-        self.lengths = try std.ArrayList(usize).initCapacity(self.allocator, 16);
+        self.lengths = try std.array_list.Managed(usize).initCapacity(self.allocator, 16);
         for (try (try self.getCsvLine()).parse(value)) |len| {
             try self.lengths.?.append(try std.fmt.parseInt(usize, len, 10));
         }
@@ -204,12 +204,12 @@ pub const Options = struct {
 
 pub const Filter = struct {
     selectionList: SelectionList,
-    values: std.ArrayList([]const u8),
+    values: std.array_list.Managed([]const u8),
 
     pub fn init(allocator: std.mem.Allocator) !Filter {
         return .{
             .selectionList = try SelectionList.init(allocator),
-            .values = std.ArrayList([]const u8).init(allocator),
+            .values = std.array_list.Managed([]const u8).init(allocator),
         };
     }
 
@@ -249,13 +249,13 @@ pub const Filter = struct {
 
 const SelectionList = struct {
     allocator: std.mem.Allocator,
-    list: std.ArrayList(Selection),
+    list: std.array_list.Managed(Selection),
     indices: ?[]usize = null,
 
     pub fn init(allocator: std.mem.Allocator) !SelectionList {
         return .{
             .allocator = allocator,
-            .list = std.ArrayList(Selection).init(allocator),
+            .list = std.array_list.Managed(Selection).init(allocator),
         };
     }
 
@@ -304,7 +304,7 @@ const SelectionList = struct {
         return minusPos;
     }
 
-    fn addRange(list: *std.ArrayList(Selection), field: []const u8, miusPos: usize) !void {
+    fn addRange(list: *std.array_list.Managed(Selection), field: []const u8, miusPos: usize) !void {
         if (toNumber(field[0..miusPos])) |from| {
             if (toNumber(field[miusPos + 1 ..])) |to| {
                 for (from..to + 1) |index| {

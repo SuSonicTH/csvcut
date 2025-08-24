@@ -44,25 +44,25 @@ pub const FormatWriter = union(OutputFormat) {
         };
     }
 
-    pub fn start(self: *FormatWriter, writer: *const std.io.AnyWriter) !void {
+    pub fn start(self: *FormatWriter, writer: *std.Io.Writer) !void {
         switch (self.*) {
             inline else => |*formatWriter| try formatWriter.start(writer),
         }
     }
 
-    pub fn writeHeader(self: *FormatWriter, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
+    pub fn writeHeader(self: *FormatWriter, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
         switch (self.*) {
             inline else => |*formatWriter| try formatWriter.writeHeader(writer, fields),
         }
     }
 
-    pub fn writeData(self: *FormatWriter, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
+    pub fn writeData(self: *FormatWriter, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
         switch (self.*) {
             inline else => |*formatWriter| try formatWriter.writeData(writer, fields),
         }
     }
 
-    pub fn end(self: *FormatWriter, writer: *const std.io.AnyWriter) !void {
+    pub fn end(self: *FormatWriter, writer: *std.Io.Writer) !void {
         switch (self.*) {
             inline else => |*formatWriter| try formatWriter.end(writer),
         }

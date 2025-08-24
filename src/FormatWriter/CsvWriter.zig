@@ -15,16 +15,16 @@ pub fn init(options: Options) !Self {
     };
 }
 
-pub fn start(self: *Self, writer: *const std.io.AnyWriter) !void {
+pub fn start(self: *Self, writer: *std.Io.Writer) !void {
     _ = self;
     _ = writer;
 }
 
-pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
+pub fn writeHeader(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     try self.writeData(writer, fields);
 }
 
-pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
+pub fn writeData(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     for (fields.*, 0..) |field, index| {
         if (index > 0) {
             _ = try writer.write(&self.options.separator);
@@ -40,7 +40,7 @@ pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const []
     _ = try writer.write("\n");
 }
 
-pub fn end(self: *Self, writer: *const std.io.AnyWriter) !void {
+pub fn end(self: *Self, writer: *std.Io.Writer) !void {
     _ = self;
     _ = writer;
 }

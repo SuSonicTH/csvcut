@@ -1,4 +1,5 @@
 const std = @import("std");
+const stdout = @import("stdout.zig");
 const Options = @import("options.zig").Options;
 const OutputFormat = @import("options.zig").OutputFormat;
 const readConfigFromFile = @import("config.zig").readConfigFromFile;
@@ -219,13 +220,17 @@ pub const Parser = struct {
 
     fn printUsage() !void {
         const help = @embedFile("USAGE.txt");
-        try std.io.getStdOut().writeAll(version ++ "\n" ++ help);
+        var writer = stdout.getWriter();
+        _ = try writer.write(version ++ "\n" ++ help);
+        stdout.flush();
         try ExitCode.OK.exit();
     }
 
     fn printVersion() !void {
         const license = @embedFile("LICENSE.txt");
-        try std.io.getStdOut().writeAll(version ++ "\n\n" ++ license);
+        var writer = stdout.getWriter();
+        _ = try writer.write(version ++ "\n\n" ++ license);
+        stdout.flush();
         try ExitCode.exit(.OK);
     }
 

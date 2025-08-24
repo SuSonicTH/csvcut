@@ -1,4 +1,5 @@
 const std = @import("std");
+const stdout = @import("stdout.zig");
 const CsvLine = @import("CsvLine").CsvLine;
 const Options = @import("options.zig").Options;
 const Filter = @import("options.zig").Filter;
@@ -54,13 +55,15 @@ fn _main() !void {
     }
 
     try ArgumentParser.validateArguments(&options);
-    const stderr = std.io.getStdErr().writer();
+
+    const stderr = stdout.getErrWriter();
+    defer stdout.flushErr();
 
     var outputFile: std.fs.File = undefined;
     if (options.outputName) |outputName| {
         outputFile = std.fs.cwd().createFile(outputName, .{}) catch |err| ExitCode.couldNotOpenOutputFile.printErrorAndExit(.{ outputName, err });
     } else {
-        outputFile = std.io.getStdOut();
+        outputFile = std.fs.File.stdout();
     }
     defer outputFile.close();
 
@@ -102,22 +105,22 @@ fn initFileReader(file: *std.fs.File) !FieldReader {
 
 const OutputWriter = struct {
     var formatWriter: FormatWriter = undefined;
-    var lineBuffer: std.ArrayList(u8) = undefined;
-    var outputWriter: std.io.AnyWriter = undefined;
+    var lineBuffer: std.array_list.Managed(u8) = undefined;
+    var outputWriter: *std.Io.Writer = undefined;
     var initialized = false;
 
-    fn init(writer: std.io.AnyWriter, fieldWidths: FieldWidths) !void {
+    fn init(writer: *std.Io.Writer, fieldWidths: FieldWidths) !void {
         if (!initialized) {
             formatWriter = try FormatWriter.init(options, allocator, fieldWidths);
-            lineBuffer = try std.ArrayList(u8).initCapacity(allocator, 1024);
-            try formatWriter.start(&writer);
+            lineBuffer = try std.array_list.Managed(u8).initCapacity(allocator, 1024);
+            try formatWriter.start(writer);
             initialized = true;
         }
         outputWriter = writer;
     }
 
     fn end() !void {
-        try formatWriter.end(&outputWriter);
+        try formatWriter.end(outputWriter);
     }
 
     fn deinit() void {
@@ -127,11 +130,15 @@ const OutputWriter = struct {
 
     fn writeBuffered(fields: *const [][]const u8, isHeader: bool) !void {
         lineBuffer.clearRetainingCapacity();
+        var buffer: [4096]u8 = undefined;
+        var writer_adapter = lineBuffer.writer().adaptToNewApi(&buffer);
+        var writer = &writer_adapter.new_interface;
         if (isHeader) {
-            try formatWriter.writeHeader(&lineBuffer.writer().any(), fields);
+            try formatWriter.writeHeader(writer, fields);
         } else {
-            try formatWriter.writeData(&lineBuffer.writer().any(), fields);
+            try formatWriter.writeData(writer, fields);
         }
+        try writer.flush();
     }
 
     fn getBuffer() []u8 {
@@ -140,9 +147,9 @@ const OutputWriter = struct {
 
     fn writeDirect(fields: *const [][]const u8, isHeader: bool) !void {
         if (isHeader) {
-            try formatWriter.writeHeader(&outputWriter, fields);
+            try formatWriter.writeHeader(outputWriter, fields);
         } else {
-            try formatWriter.writeData(&outputWriter, fields);
+            try formatWriter.writeData(outputWriter, fields);
         }
     }
 
@@ -163,7 +170,7 @@ fn proccessFile(fieldReader: anytype, outputFile: std.fs.File) !void {
     }
 }
 
-fn processHeader(fieldReader: anytype) !?std.ArrayList([]const u8) {
+fn processHeader(fieldReader: anytype) !?std.array_list.Managed([]const u8) {
     if (options.fileHeader) {
         options.header = try fieldReader.readLine();
     }
@@ -175,7 +182,7 @@ fn processHeader(fieldReader: anytype) !?std.ArrayList([]const u8) {
     fieldReader.setFiltersOut(options.filtersOut);
 
     if (options.header != null and options.outputHeader) {
-        var header = std.ArrayList([]const u8).init(allocator);
+        var header = std.array_list.Managed([]const u8).init(allocator);
         if (try fieldReader.getSelectedFields(options.header.?)) |selectedHeader| {
             for (selectedHeader) |field| {
                 try header.append(field);
@@ -194,12 +201,13 @@ pub fn bigBufferedWriter(underlying_stream: anytype) std.io.BufferedWriter(1024 
     return .{ .unbuffered_writer = underlying_stream };
 }
 
-fn proccessFileDirect(fieldReader: anytype, outputFile: std.fs.File, header: ?std.ArrayList([]const u8)) !void {
+fn proccessFileDirect(fieldReader: anytype, outputFile: std.fs.File, header: ?std.array_list.Managed([]const u8)) !void {
     var fieldWidths = try FieldWidths.init(options.outputFormat, options.fileHeader, options.header, fieldReader, allocator);
     defer fieldWidths.deinit();
 
-    var bufferedWriter = bigBufferedWriter(outputFile.writer());
-    try OutputWriter.init(bufferedWriter.writer().any(), fieldWidths);
+    var buffer: [4096]u8 = undefined;
+    var writer = outputFile.writer(&buffer);
+    try OutputWriter.init(&writer.interface, fieldWidths);
     defer OutputWriter.deinit();
 
     if (header != null and options.outputHeader) {
@@ -222,7 +230,7 @@ fn proccessFileDirect(fieldReader: anytype, outputFile: std.fs.File, header: ?st
     }
 
     try OutputWriter.end();
-    try bufferedWriter.flush();
+    try writer.interface.flush();
 }
 
 fn listHeader() !void {
@@ -245,22 +253,25 @@ fn listHeader() !void {
 }
 
 fn printHeader(header: [][]const u8) !void {
-    const out = std.io.getStdOut();
+    var writer = stdout.getWriter();
+    defer stdout.flush();
+
     for (header) |field| {
-        _ = try out.write(field);
-        _ = try out.write("\n");
+        _ = try writer.write(field);
+        _ = try writer.write("\n");
     }
 }
 
-fn proccessFileUnique(fieldReader: anytype, outputFile: std.fs.File, outputHeader: ?std.ArrayList([]const u8)) !void {
+fn proccessFileUnique(fieldReader: anytype, outputFile: std.fs.File, outputHeader: ?std.array_list.Managed([]const u8)) !void {
     var uniqueAgregator = UniqueAgregator.init(allocator);
     defer uniqueAgregator.deinit();
 
     var fieldWidths = try FieldWidths.init(options.outputFormat, options.fileHeader, options.header, fieldReader, allocator);
     defer fieldWidths.deinit();
 
-    var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
-    try OutputWriter.init(bufferedWriter.writer().any(), fieldWidths);
+    var buffer: [4096]u8 = undefined;
+    var writer = outputFile.writer(&buffer);
+    try OutputWriter.init(&writer.interface, fieldWidths);
     defer OutputWriter.deinit();
 
     if (outputHeader) |header| {
@@ -281,10 +292,10 @@ fn proccessFileUnique(fieldReader: anytype, outputFile: std.fs.File, outputHeade
     }
 
     try OutputWriter.end();
-    try bufferedWriter.flush();
+    try writer.interface.flush();
 }
 
-fn proccessFileCount(fieldReader: anytype, outputFile: std.fs.File, outputHeader: ?std.ArrayList([]const u8)) !void {
+fn proccessFileCount(fieldReader: anytype, outputFile: std.fs.File, outputHeader: ?std.array_list.Managed([]const u8)) !void {
     var countAggregator = try CountAggregator.init(allocator);
 
     while (try fieldReader.readLine()) |fields| {
@@ -294,8 +305,9 @@ fn proccessFileCount(fieldReader: anytype, outputFile: std.fs.File, outputHeader
     var fieldWidths = try FieldWidths.initCountAggregated(options.outputFormat, outputHeader, &countAggregator, allocator);
     defer fieldWidths.deinit();
 
-    var bufferedWriter = std.io.bufferedWriter(outputFile.writer());
-    try OutputWriter.init(bufferedWriter.writer().any(), fieldWidths);
+    var buffer: [4096]u8 = undefined;
+    var writer = outputFile.writer(&buffer);
+    try OutputWriter.init(&writer.interface, fieldWidths);
     defer OutputWriter.deinit();
 
     if (outputHeader) |header| {
@@ -313,7 +325,7 @@ fn proccessFileCount(fieldReader: anytype, outputFile: std.fs.File, outputHeader
     }
 
     try OutputWriter.end();
-    try bufferedWriter.flush();
+    try writer.interface.flush();
 }
 
 test {

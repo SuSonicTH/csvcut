@@ -16,7 +16,7 @@ pub fn init(allocator: std.mem.Allocator, fieldWidths: FieldWidths) !Self {
     };
 }
 
-pub fn start(self: *Self, writer: *const std.io.AnyWriter) !void {
+pub fn start(self: *Self, writer: *std.Io.Writer) !void {
     _ = writer;
     const maxSpace = self.fieldWidths.maxSpace;
 
@@ -27,7 +27,7 @@ pub fn start(self: *Self, writer: *const std.io.AnyWriter) !void {
     @memset(self.dashes, '-');
 }
 
-pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
+pub fn writeHeader(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     for (fields.*, 0..) |field, i| {
         const escaped = try escape.jira(field);
         const len = self.fieldWidths.widths[i] - escaped.len + 1;
@@ -39,7 +39,7 @@ pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const 
     _ = try writer.write("||\n");
 }
 
-pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
+pub fn writeData(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     for (fields.*, 0..) |field, i| {
         const escaped = try escape.jira(field);
         const len = self.fieldWidths.widths[i] - escaped.len + 1;
@@ -51,7 +51,7 @@ pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const []
     _ = try writer.write("|\n");
 }
 
-pub fn end(self: *Self, writer: *const std.io.AnyWriter) !void {
+pub fn end(self: *Self, writer: *std.Io.Writer) !void {
     _ = writer;
     self.allocator.free(self.spaces);
     self.allocator.free(self.dashes);

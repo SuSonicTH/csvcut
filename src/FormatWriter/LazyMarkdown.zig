@@ -6,12 +6,12 @@ pub fn init() !Self {
     return .{};
 }
 
-pub fn start(self: *Self, writer: *const std.io.AnyWriter) !void {
+pub fn start(self: *Self, writer: *std.Io.Writer) !void {
     _ = self;
     _ = writer;
 }
 
-pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
+pub fn writeHeader(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     try self.writeData(writer, fields);
     for (fields.*) |field| {
         _ = field;
@@ -20,7 +20,7 @@ pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const 
     _ = try writer.write("|\n");
 }
 
-pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
+pub fn writeData(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     _ = self;
     for (fields.*) |field| {
         _ = try writer.write("| ");
@@ -30,7 +30,7 @@ pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const []
     _ = try writer.write("|\n");
 }
 
-pub fn end(self: *Self, writer: *const std.io.AnyWriter) !void {
+pub fn end(self: *Self, writer: *std.Io.Writer) !void {
     _ = self;
     _ = writer;
 }

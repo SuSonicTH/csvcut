@@ -1,6 +1,6 @@
 .{
     .name = .csvcut,
-    .version = "0.1.0-beta",
+    .version = "0.1.1-beta",
     .fingerprint = 0x8035f4e75082840a,
 
     .dependencies = .{},

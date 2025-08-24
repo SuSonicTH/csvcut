@@ -1,4 +1,5 @@
 const std = @import("std");
+const stdout = @import("../stdout.zig");
 const Self = @This();
 
 pub const Options = struct {};
@@ -18,12 +19,12 @@ pub fn init(
     };
 }
 
-pub fn start(self: *Self, writer: *const std.io.AnyWriter) !void {
+pub fn start(self: *Self, writer: *std.Io.Writer) !void {
     _ = self;
     _ = try writer.write(@embedFile("ExcelXmlHeader.xml") ++ "\n");
 }
 
-pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
+pub fn writeHeader(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     try self.writeData(writer, fields);
     self.header = try self.allocator.alloc([]const u8, fields.*.len);
     for (fields.*, 0..) |field, i| {
@@ -31,7 +32,7 @@ pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const 
     }
 }
 
-pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
+pub fn writeData(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     _ = try writer.write("<Row>");
     for (fields.*) |field| {
         const val = checkFormat(field);
@@ -47,7 +48,7 @@ pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const []
     self.lineCount += 1;
     if (self.lineCount == maximumRows) {
         if (self.sheet == 1) {
-            _ = try std.io.getStdErr().write("Warning: using more then 1048576 lines in excleXml in a single sheet is not supported, splitting to multiple sheets\n");
+            _ = try stdout.getErrWriter().write("Warning: using more then 1048576 lines in excleXml in a single sheet is not supported, splitting to multiple sheets\n");
         }
         self.sheet += 1;
         self.lineCount = 0;
@@ -215,7 +216,7 @@ fn removeGrouping(hasGrouping: bool, field: []const u8) []const u8 {
     return field;
 }
 
-pub fn end(self: *Self, writer: *const std.io.AnyWriter) !void {
+pub fn end(self: *Self, writer: *std.Io.Writer) !void {
     _ = self;
     _ = try writer.write("</Table>\n</Worksheet>\n</Workbook>");
 }

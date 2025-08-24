@@ -19,7 +19,7 @@ pub fn init(
     };
 }
 
-pub fn start(self: *Self, writer: *const std.io.AnyWriter) !void {
+pub fn start(self: *Self, writer: *std.Io.Writer) !void {
     _ = writer;
     const maxSpace = self.fieldWidths.maxSpace;
 
@@ -32,7 +32,7 @@ pub fn start(self: *Self, writer: *const std.io.AnyWriter) !void {
     }
 }
 
-pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
+pub fn writeHeader(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     try self.writeTableLine(writer, fields.len, "┌", "┬", "┐\n");
     for (fields.*, 0..) |field, i| {
         const len = self.fieldWidths.widths[i] - field.len;
@@ -45,7 +45,7 @@ pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const 
     self.fieldCount = fields.len;
 }
 
-pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
+pub fn writeData(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     for (fields.*, 0..) |field, i| {
         const len = self.fieldWidths.widths[i] - field.len;
         _ = try writer.write("│");
@@ -55,13 +55,13 @@ pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const []
     _ = try writer.write("│\n");
 }
 
-pub fn end(self: *Self, writer: *const std.io.AnyWriter) !void {
+pub fn end(self: *Self, writer: *std.Io.Writer) !void {
     try self.writeTableLine(writer, self.fieldCount, "└", "┴", "┘\n");
     self.allocator.free(self.spaces);
     self.allocator.free(self.lineDashes);
 }
 
-inline fn writeTableLine(self: *Self, writer: *const std.io.AnyWriter, len: usize, left: []const u8, middle: []const u8, right: []const u8) !void {
+inline fn writeTableLine(self: *Self, writer: *std.Io.Writer, len: usize, left: []const u8, middle: []const u8, right: []const u8) !void {
     for (0..len) |i| {
         if (i == 0) {
             _ = try writer.write(left);

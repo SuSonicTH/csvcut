@@ -1,4 +1,5 @@
 const std = @import("std");
+const stdout = @import("../stdout.zig");
 const Self = @This();
 
 pub const Options = struct {};
@@ -12,7 +13,7 @@ pub fn init(options: Options) !Self {
     };
 }
 
-pub fn start(self: *Self, writer: *const std.io.AnyWriter) !void {
+pub fn start(self: *Self, writer: *std.Io.Writer) !void {
     _ = self;
     _ = try writer.write("<html><body>\n");
     _ = try writer.write("<style>\n");
@@ -21,7 +22,7 @@ pub fn start(self: *Self, writer: *const std.io.AnyWriter) !void {
     _ = try writer.write("<table class=\"styled-table\">\n");
 }
 
-pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
+pub fn writeHeader(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     _ = self;
     _ = try writer.write("<thead><tr>");
     for (fields.*) |field| {
@@ -33,7 +34,7 @@ pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const 
     _ = try writer.write("<tbody>");
 }
 
-pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
+pub fn writeData(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     _ = try writer.write("<tr>");
     for (fields.*) |field| {
         _ = try writer.write("<td>");
@@ -44,11 +45,11 @@ pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const []
 
     self.lineCount += 1;
     if (self.lineCount == 50000) {
-        _ = try std.io.getStdErr().write("Warning: using more then 50000 lines in html output causes performance issues and possible crashes in the browser\n");
+        _ = try stdout.getErrWriter().write("Warning: using more then 50000 lines in html output causes performance issues and possible crashes in the browser\n");
     }
 }
 
-pub fn end(self: *Self, writer: *const std.io.AnyWriter) !void {
+pub fn end(self: *Self, writer: *std.Io.Writer) !void {
     _ = self;
     _ = try writer.write("</tbody></table></body></html>\n");
 }

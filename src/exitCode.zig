@@ -1,6 +1,7 @@
 const std = @import("std");
+const stdout = @import("stdout.zig");
 
-pub const version = "csvcut v0.1.0-beta";
+pub const version = "csvcut v0.1.1-beta";
 
 pub const ExitCode = enum(u8) {
     OK,
@@ -35,8 +36,8 @@ pub const ExitCode = enum(u8) {
             .extraLfWithoutLength => return "--extraLF and --extraCRLF are only used for fixed field processing with --lengths",
             .countAndUniqueAreExclusive => return "--count and --unique are exclusive, use either, not both at the same time",
 
-            .couldNotOpenInputFile => return "could not open input file '{s}' reason: {!}",
-            .couldNotOpenOutputFile => return "could not open output file '{s}' reason: {!}",
+            .couldNotOpenInputFile => return "could not open input file '{s}' reason: {}",
+            .couldNotOpenOutputFile => return "could not open output file '{s}' reason: {}",
             .couldNotReadHeader => return "could not read header from file '{s}'",
             .outOfMemory => return "could not allocate more memory",
             .genericError => return "unhandled error '{any}'",
@@ -48,20 +49,22 @@ pub const ExitCode = enum(u8) {
     }
 
     pub fn printExitCodes() !void {
-        const writer = std.io.getStdOut().writer();
+        var writer = stdout.getWriter();
         _ = try writer.print("{s}\n\nExit Codes:\n", .{version});
 
         inline for (std.meta.fields(ExitCode)) |exitCode| {
             try writer.print("{d}: {s}\n", .{ exitCode.value, exitCode.name });
         }
+        stdout.flush();
         try ExitCode.OK.exit();
     }
 
     fn _printErrorAndExit(comptime self: ExitCode, values: anytype) !noreturn {
-        const writer = std.io.getStdErr().writer();
+        var writer = stdout.getWriter();
         _ = try writer.print("{s}\n\nError #{d}: ", .{ version, self.code() });
         _ = try writer.print(self.message(), values);
         _ = try writer.write("\n");
+        stdout.flush();
         _ = try self.exit();
     }
 

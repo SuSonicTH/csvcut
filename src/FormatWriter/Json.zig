@@ -11,17 +11,17 @@ pub fn init(allocator: std.mem.Allocator) !Self {
     };
 }
 
-pub fn start(self: *Self, writer: *const std.io.AnyWriter) !void {
+pub fn start(self: *Self, writer: *std.Io.Writer) !void {
     _ = self;
     _ = try writer.write("[\n");
 }
 
-pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
+pub fn writeHeader(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     _ = writer;
     self.header = fields;
 }
 
-pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
+pub fn writeData(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     if (!self.firstLine) {
         _ = try writer.write(",\n");
     } else {
@@ -41,7 +41,7 @@ pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const []
     _ = try writer.write("}");
 }
 
-pub fn end(self: *Self, writer: *const std.io.AnyWriter) !void {
+pub fn end(self: *Self, writer: *std.Io.Writer) !void {
     _ = self;
     _ = try writer.write("\n]\n");
 }

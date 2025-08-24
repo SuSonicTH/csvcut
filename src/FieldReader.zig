@@ -48,8 +48,8 @@ linesRead: usize = 0,
 selectedIndices: ?[]usize = null,
 excludedIndices: ?std.AutoHashMap(usize, bool) = null,
 selected: ?[][]const u8 = null,
-filters: ?std.ArrayList(Filter) = null,
-filtersOut: ?std.ArrayList(Filter) = null,
+filters: ?std.array_list.Managed(Filter) = null,
+filtersOut: ?std.array_list.Managed(Filter) = null,
 
 pub fn initCsvReader(file: *std.fs.File, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !Self {
     return .{
@@ -99,13 +99,13 @@ pub fn setExcludedIndices(self: *Self, excludedIndices: ?std.AutoHashMap(usize, 
     }
 }
 
-pub fn setFilters(self: *Self, filterList: ?std.ArrayList(Filter)) void {
+pub fn setFilters(self: *Self, filterList: ?std.array_list.Managed(Filter)) void {
     if (filterList) |filters| {
         self.filters = filters;
     }
 }
 
-pub fn setFiltersOut(self: *Self, filterOutList: ?std.ArrayList(Filter)) void {
+pub fn setFiltersOut(self: *Self, filterOutList: ?std.array_list.Managed(Filter)) void {
     if (filterOutList) |filters| {
         self.filtersOut = filters;
     }
@@ -426,7 +426,7 @@ test "Filter A" {
     defer testing.allocator.free(header);
 
     //setup filter
-    var filterList = std.ArrayList(Filter).init(testing.allocator);
+    var filterList = std.array_list.Managed(Filter).init(testing.allocator);
     defer filterList.deinit();
     var filter = try Filter.init(testing.allocator);
     defer filter.deinit();
@@ -458,7 +458,7 @@ test "FilterOut A" {
     defer testing.allocator.free(header);
 
     //setup filter
-    var filterList = std.ArrayList(Filter).init(testing.allocator);
+    var filterList = std.array_list.Managed(Filter).init(testing.allocator);
     defer filterList.deinit();
     var filter = try Filter.init(testing.allocator);
     defer filter.deinit();

@@ -1,4 +1,5 @@
 const std = @import("std");
+const stdout = @import("../stdout.zig");
 const Self = @This();
 
 firstLine: bool = true,
@@ -8,12 +9,12 @@ pub fn init() !Self {
     return .{};
 }
 
-pub fn start(self: *Self, writer: *const std.io.AnyWriter) !void {
+pub fn start(self: *Self, writer: *std.Io.Writer) !void {
     _ = try writer.write(@embedFile("HtmlHandsonHeader.html"));
     self.lineCount = 0;
 }
 
-pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
+pub fn writeHeader(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     _ = self;
     _ = try writer.write("[");
     for (fields.*, 0..) |field, i| {
@@ -30,7 +31,7 @@ pub fn writeHeader(self: *Self, writer: *const std.io.AnyWriter, fields: *const 
     _ = try writer.write("var data = [\n");
 }
 
-pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const [][]const u8) !void {
+pub fn writeData(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     if (!self.firstLine) {
         _ = try writer.write(",\n");
     } else {
@@ -50,11 +51,11 @@ pub fn writeData(self: *Self, writer: *const std.io.AnyWriter, fields: *const []
 
     self.lineCount += 1;
     if (self.lineCount == 10000) {
-        _ = try std.io.getStdErr().write("Warning: using more then 10000 lines in htmlHandson output causes performance issues and possible crashes in the browser\n");
+        _ = try stdout.getErrWriter().write("Warning: using more then 10000 lines in htmlHandson output causes performance issues and possible crashes in the browser\n");
     }
 }
 
-pub fn end(self: *Self, writer: *const std.io.AnyWriter) !void {
+pub fn end(self: *Self, writer: *std.Io.Writer) !void {
     _ = self;
     _ = try writer.write("\n];\n");
     _ = try writer.write(@embedFile("HtmlHandsonFooter.html"));

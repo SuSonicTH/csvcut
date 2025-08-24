@@ -26,7 +26,7 @@ pub fn init(outputFormat: OutputFormat, fileHeader: bool, header: ?[][]const u8,
     }
 }
 
-pub fn initCountAggregated(outputFormat: OutputFormat, outputHeader: ?std.ArrayList([]const u8), countAggregator: *CountAggregator, allocator: std.mem.Allocator) !Self {
+pub fn initCountAggregated(outputFormat: OutputFormat, outputHeader: ?std.array_list.Managed([]const u8), countAggregator: *CountAggregator, allocator: std.mem.Allocator) !Self {
     switch (outputFormat) {
         .markdown, .jira, .table => {
             const widths = try collectCountWidths(outputHeader, countAggregator, allocator, outputFormat);
@@ -63,7 +63,7 @@ fn collectWidths(fieldReader: anytype, header: ?[][]const u8, allocator: std.mem
     return fieldWidths;
 }
 
-fn collectCountWidths(outputHeader: ?std.ArrayList([]const u8), countAggregator: *CountAggregator, allocator: std.mem.Allocator, outputFormat: OutputFormat) ![]usize {
+fn collectCountWidths(outputHeader: ?std.array_list.Managed([]const u8), countAggregator: *CountAggregator, allocator: std.mem.Allocator, outputFormat: OutputFormat) ![]usize {
     var fieldWidths: []usize = undefined;
     var iterator = countAggregator.countMap.iterator();
 

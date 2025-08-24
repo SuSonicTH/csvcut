@@ -54,13 +54,13 @@ pub const UniqueAgregator = struct {
 pub const CountAggregator = struct {
     allocator: std.mem.Allocator,
     countMap: std.StringArrayHashMap(Fields),
-    keyBuffer: std.ArrayList(u8),
+    keyBuffer: std.array_list.Managed(u8),
 
     pub fn init(allocator: std.mem.Allocator) !CountAggregator {
         return .{
             .allocator = allocator,
             .countMap = std.StringArrayHashMap(Fields).init(allocator),
-            .keyBuffer = try std.ArrayList(u8).initCapacity(allocator, 1024),
+            .keyBuffer = try std.array_list.Managed(u8).initCapacity(allocator, 1024),
         };
     }
 
