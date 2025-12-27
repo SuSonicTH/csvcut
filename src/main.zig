@@ -1,5 +1,4 @@
 const std = @import("std");
-const stdout = @import("stdout.zig");
 const CsvLine = @import("CsvLine").CsvLine;
 const Options = @import("options.zig").Options;
 const Filter = @import("options.zig").Filter;
@@ -56,9 +55,6 @@ fn _main() !void {
 
     try ArgumentParser.validateArguments(&options);
 
-    const stderr = stdout.getErrWriter();
-    defer stdout.flushErr();
-
     var outputFile: std.fs.File = undefined;
     if (options.outputName) |outputName| {
         outputFile = std.fs.cwd().createFile(outputName, .{}) catch |err| ExitCode.couldNotOpenOutputFile.printErrorAndExit(.{ outputName, err });
@@ -78,12 +74,17 @@ fn _main() !void {
     }
 
     if (options.time) {
+        var stderr_buffer: [1024]u8 = undefined;
+        var stderr_writer = std.fs.File.stderr().writer(&stderr_buffer);
+        var stderr = &stderr_writer.interface;
+
         const timeNeeded = @as(f32, @floatFromInt(timer.lap())) / 1000000.0;
         if (timeNeeded > 1000) {
             _ = try stderr.print("time needed: {d:0.2}s\n", .{timeNeeded / 1000.0});
         } else {
             _ = try stderr.print("time needed: {d:0.2}ms\n", .{timeNeeded});
         }
+        try stderr.flush();
     }
 }
 
@@ -253,13 +254,15 @@ fn listHeader() !void {
 }
 
 fn printHeader(header: [][]const u8) !void {
-    var writer = stdout.getWriter();
-    defer stdout.flush();
+    var stdout_buffer: [1024]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    var stdout = &stdout_writer.interface;
 
     for (header) |field| {
-        _ = try writer.write(field);
-        _ = try writer.write("\n");
+        _ = try stdout.write(field);
+        _ = try stdout.write("\n");
     }
+    try stdout.flush();
 }
 
 fn proccessFileUnique(fieldReader: anytype, outputFile: std.fs.File, outputHeader: ?std.array_list.Managed([]const u8)) !void {

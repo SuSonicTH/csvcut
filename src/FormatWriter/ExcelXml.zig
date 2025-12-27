@@ -1,5 +1,4 @@
 const std = @import("std");
-const stdout = @import("../stdout.zig");
 const Self = @This();
 
 pub const Options = struct {};
@@ -48,7 +47,12 @@ pub fn writeData(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u
     self.lineCount += 1;
     if (self.lineCount == maximumRows) {
         if (self.sheet == 1) {
-            _ = try stdout.getErrWriter().write("Warning: using more then 1048576 lines in excleXml in a single sheet is not supported, splitting to multiple sheets\n");
+            var stderr_buffer: [1024]u8 = undefined;
+            var stderr_writer = std.fs.File.stderr().writer(&stderr_buffer);
+            var stderr = &stderr_writer.interface;
+
+            _ = try stderr.write("Warning: using more then 1048576 lines in excleXml in a single sheet is not supported, splitting to multiple sheets\n");
+            try stderr.flush();
         }
         self.sheet += 1;
         self.lineCount = 0;

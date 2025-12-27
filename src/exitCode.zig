@@ -1,5 +1,4 @@
 const std = @import("std");
-const stdout = @import("stdout.zig");
 
 pub const version = "csvcut v0.1.1-beta";
 
@@ -49,22 +48,28 @@ pub const ExitCode = enum(u8) {
     }
 
     pub fn printExitCodes() !void {
-        var writer = stdout.getWriter();
-        _ = try writer.print("{s}\n\nExit Codes:\n", .{version});
+        var stderr_buffer: [1024]u8 = undefined;
+        var stderr_writer = std.fs.File.stderr().writer(&stderr_buffer);
+        var stderr = &stderr_writer.interface;
+
+        _ = try stderr.print("{s}\n\nExit Codes:\n", .{version});
 
         inline for (std.meta.fields(ExitCode)) |exitCode| {
-            try writer.print("{d}: {s}\n", .{ exitCode.value, exitCode.name });
+            try stderr.print("{d}: {s}\n", .{ exitCode.value, exitCode.name });
         }
-        stdout.flush();
+        try stderr.flush();
         try ExitCode.OK.exit();
     }
 
     fn _printErrorAndExit(comptime self: ExitCode, values: anytype) !noreturn {
-        var writer = stdout.getWriter();
-        _ = try writer.print("{s}\n\nError #{d}: ", .{ version, self.code() });
-        _ = try writer.print(self.message(), values);
-        _ = try writer.write("\n");
-        stdout.flush();
+        var stderr_buffer: [1024]u8 = undefined;
+        var stderr_writer = std.fs.File.stderr().writer(&stderr_buffer);
+        var stderr = &stderr_writer.interface;
+
+        _ = try stderr.print("{s}\n\nError #{d}: ", .{ version, self.code() });
+        _ = try stderr.print(self.message(), values);
+        _ = try stderr.write("\n");
+        try stderr.flush();
         _ = try self.exit();
     }
 

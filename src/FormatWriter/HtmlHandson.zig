@@ -1,5 +1,4 @@
 const std = @import("std");
-const stdout = @import("../stdout.zig");
 const Self = @This();
 
 firstLine: bool = true,
@@ -51,7 +50,12 @@ pub fn writeData(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u
 
     self.lineCount += 1;
     if (self.lineCount == 10000) {
-        _ = try stdout.getErrWriter().write("Warning: using more then 10000 lines in htmlHandson output causes performance issues and possible crashes in the browser\n");
+        var stderr_buffer: [1024]u8 = undefined;
+        var stderr_writer = std.fs.File.stderr().writer(&stderr_buffer);
+        var stderr = &stderr_writer.interface;
+
+        _ = try stderr.write("Warning: using more then 10000 lines in htmlHandson output causes performance issues and possible crashes in the browser\n");
+        try stderr.flush();
     }
 }
 
