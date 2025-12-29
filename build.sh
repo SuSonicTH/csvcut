@@ -120,7 +120,7 @@ build_platform "native" $NATIVE_SUFFIX
 
 if [ "$TESTS" == "true" ]; then
     echo testing
-    zig test src/main.zig || exit_on_error
+    zig build test || exit_on_error
 fi
 
 # build all

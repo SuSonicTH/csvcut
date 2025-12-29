@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const version = "csvcut v0.1.1-beta";
+pub const version = "csvcut v0.1.2-beta";
 
 pub const ExitCode = enum(u8) {
     OK,
