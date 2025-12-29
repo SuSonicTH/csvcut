@@ -3,7 +3,12 @@
     .version = "0.1.1-beta",
     .fingerprint = 0x8035f4e75082840a,
 
-    .dependencies = .{},
+    .dependencies = .{
+        .mvzr = .{
+            .url = "https://github.com/mnemnion/mvzr/archive/refs/tags/v0.3.7.tar.gz",
+            .hash = "mvzr-0.3.7-ZSOky5FtAQB2VrFQPNbXHQCFJxWTMAYEK7ljYEaMR6jt",
+        },
+    },
 
     .paths = .{
         "build.zig",

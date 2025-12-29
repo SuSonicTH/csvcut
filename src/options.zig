@@ -1,5 +1,7 @@
 const std = @import("std");
 const CsvLine = @import("FieldReader/CsvLine.zig");
+const ExitCode = @import("exitCode.zig").ExitCode;
+const mvzr = @import("mvzr");
 
 pub const OutputFormat = enum {
     csv,
@@ -23,7 +25,8 @@ const Selection = union(enum) {
 const OptionError = error{
     NoSuchField,
     NoHeader,
-    MoreThanOneEqualInFilter,
+    NoEqualOrTildeInFilter,
+    RegexCompileError,
 };
 
 pub const Options = struct {
@@ -202,14 +205,21 @@ pub const Options = struct {
     }
 };
 
+const FilterType = enum { equal, regex };
+const FilterValue = struct {
+    value: []const u8,
+    type: FilterType,
+    regex: ?mvzr.Regex,
+};
+
 pub const Filter = struct {
     selectionList: SelectionList,
-    values: std.array_list.Managed([]const u8),
+    values: std.array_list.Managed(FilterValue),
 
     pub fn init(allocator: std.mem.Allocator) !Filter {
         return .{
             .selectionList = try SelectionList.init(allocator),
-            .values = std.array_list.Managed([]const u8).init(allocator),
+            .values = std.array_list.Managed(FilterValue).init(allocator),
         };
     }
 
@@ -219,18 +229,31 @@ pub const Filter = struct {
     }
 
     pub fn append(self: *Filter, filter: []const u8) !void {
-        var it = std.mem.splitScalar(u8, filter, '=');
-        if (it.next()) |field| {
-            try self.selectionList.append(field);
-        }
-        if (it.next()) |value| {
-            try self.values.append(value);
+        var eqlPos: usize = 0;
+        var filterType: FilterType = undefined;
+
+        if (std.mem.indexOfScalar(u8, filter, '=')) |pos| {
+            eqlPos = pos;
+            filterType = .equal;
+        } else if (std.mem.indexOfScalar(u8, filter, '~')) |pos| {
+            eqlPos = pos;
+            filterType = .regex;
         } else {
-            try self.values.append("");
+            return OptionError.NoEqualOrTildeInFilter;
         }
-        if (it.next()) |_| {
-            return OptionError.MoreThanOneEqualInFilter;
+
+        const field = filter[0..eqlPos];
+        try self.selectionList.append(field);
+
+        const value = filter[eqlPos + 1 ..];
+        var regex: ?mvzr.Regex = null;
+        if (filterType == .regex) {
+            regex = mvzr.compile(value);
+            if (regex == null) {
+                ExitCode.regexCompileError.printErrorAndExit(.{ value, field });
+            }
         }
+        try self.values.append(.{ .value = value, .type = filterType, .regex = regex });
     }
 
     pub fn calculateIndices(self: *Filter, header: ?[][]const u8) !void {
@@ -239,8 +262,14 @@ pub const Filter = struct {
 
     pub fn matches(self: *const Filter, fields: [][]const u8) bool {
         for (self.selectionList.indices.?, 0..) |fieldIndex, i| {
-            if (!std.mem.eql(u8, fields[fieldIndex], self.values.items[i])) {
-                return false;
+            const value = self.values.items[i];
+            switch (value.type) {
+                .equal => if (!std.mem.eql(u8, fields[fieldIndex], value.value)) {
+                    return false;
+                },
+                .regex => if (!value.regex.?.isMatch(fields[fieldIndex])) {
+                    return false;
+                },
             }
         }
         return true;
@@ -304,9 +333,9 @@ const SelectionList = struct {
         return minusPos;
     }
 
-    fn addRange(list: *std.array_list.Managed(Selection), field: []const u8, miusPos: usize) !void {
-        if (toNumber(field[0..miusPos])) |from| {
-            if (toNumber(field[miusPos + 1 ..])) |to| {
+    fn addRange(list: *std.array_list.Managed(Selection), field: []const u8, minusPos: usize) !void {
+        if (toNumber(field[0..minusPos])) |from| {
+            if (toNumber(field[minusPos + 1 ..])) |to| {
                 for (from..to + 1) |index| {
                     try list.append(.{ .index = index - 1 });
                 }

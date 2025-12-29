@@ -81,14 +81,19 @@ Options:
                                but removes given columns from output
 
       --filter [filter,..]     list of filters that are applied
-                               argument field1=value1,field2=value2,....
+                               argument field1=value,field2~regex,....
+                               only lines were all fields are matching are outputted
+
+                               field=value => the value has to match exactly
+                               field~regex => the regular expression has to match
+                               
                                can be used multiple times, if any filter matches
                                the line will be output
 
       --filterOut [filter,...] list of negative filters that are applied
                                inverse of --filter
                                ignores lines that match any filter
-                               is applied befroe --filter
+                               is applied before --filter
 
       --trim                   removes space & tab characters from start & end
       --unique                 only output unique lines

@@ -12,6 +12,7 @@ pub const ExitCode = enum(u8) {
     includeAndExcludeTogether,
     countAndUniqueAreExclusive,
     extraLfWithoutLength,
+    regexCompileError,
 
     couldNotOpenInputFile,
     couldNotOpenOutputFile,
@@ -34,7 +35,7 @@ pub const ExitCode = enum(u8) {
             .includeAndExcludeTogether => return "--include and --exclude cannot be used together",
             .extraLfWithoutLength => return "--extraLF and --extraCRLF are only used for fixed field processing with --lengths",
             .countAndUniqueAreExclusive => return "--count and --unique are exclusive, use either, not both at the same time",
-
+            .regexCompileError => return "invalid regex '{s}' for field '{s}'",
             .couldNotOpenInputFile => return "could not open input file '{s}' reason: {}",
             .couldNotOpenOutputFile => return "could not open output file '{s}' reason: {}",
             .couldNotReadHeader => return "could not read header from file '{s}'",
