@@ -13,30 +13,28 @@ jobs:
         uses: mlugg/setup-zig@v2
         with:
           version: 0.17.0
-      - name: Get upx
-        uses: samyfodil/upx-action@v1.0.3
       - name: Run build
-        run: ./build.sh --release
-      - name: list bin
-        run: ls -la ./bin/ ./zig-out/bin/
+        run: zig build release
+      - name: list zig-out/bin
+        run: ls -la ./zig-out/bin/
       - name: Upload csvcut-x86_64-windows
         uses: actions/upload-artifact@v4.6.2
-        with: 
+        with:
           name: csvcut-x86_64-windows
-          path: ./bin/csvcut-x86_64-windows.zip
+          path: ./zig-out/bin/csvcut-x86_64-windows.exe
           compression-level: 0
           overwrite: true
       - name: Upload csvcut-x86_64-linux
         uses: actions/upload-artifact@v4.6.2
-        with: 
+        with:
           name: csvcut-x86_64-linux
-          path: ./bin/csvcut-x86_64-linux.gz
+          path: ./zig-out/bin/csvcut-x86_64-linux
           compression-level: 0
           overwrite: true
       - name: Upload csvcut-aarch64-linux
         uses: actions/upload-artifact@v4.6.2
-        with: 
+        with:
           name: csvcut-aarch64-linux
-          path: ./bin/csvcut-aarch64-linux.gz
+          path: ./zig-out/bin/csvcut-aarch64-linux
           compression-level: 0
           overwrite: true

@@ -2,7 +2,7 @@ const std = @import("std");
 const runtime = @import("runtime.zig");
 const license = @import("license");
 
-pub const version = "csvcut v0.1.4-beta";
+pub const version = "csvcut v0.1.4";
 
 pub const ExitCode = enum(u8) {
     OK,
