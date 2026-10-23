@@ -4,7 +4,7 @@ const Self = @This();
 pub const Options = struct {
     separator: [1]u8 = .{','},
     lineEnding: [1]u8 = .{'\n'},
-    quoute: ?[1]u8 = null,
+    quote: ?[1]u8 = null,
 };
 
 options: Options,
@@ -27,17 +27,46 @@ pub fn writeHeader(self: *Self, writer: *std.Io.Writer, fields: *const [][]const
 pub fn writeData(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     for (fields.*, 0..) |field, index| {
         if (index > 0) {
-            _ = try writer.write(&self.options.separator);
+            try writer.writeAll(&self.options.separator);
         }
-        if (self.options.quoute != null) {
-            _ = try writer.write(&self.options.quoute.?);
-        }
-        _ = try writer.write(field);
-        if (self.options.quoute != null) {
-            _ = try writer.write(&self.options.quoute.?);
+        try self.writeField(writer, field);
+    }
+    try writer.writeAll(&self.options.lineEnding);
+}
+
+fn writeField(self: *Self, writer: *std.Io.Writer, field: []const u8) !void {
+    if (self.options.quote) |quote| {
+        try writer.writeAll(&quote);
+        try writeQuotedBody(writer, field, quote[0]);
+        try writer.writeAll(&quote);
+        return;
+    }
+
+    if (needsQuoting(field, self.options.separator[0])) {
+        try writer.writeAll("\"");
+        try writeQuotedBody(writer, field, '"');
+        try writer.writeAll("\"");
+    } else {
+        try writer.writeAll(field);
+    }
+}
+
+fn needsQuoting(field: []const u8, separator: u8) bool {
+    for (field) |c| {
+        if (c == separator or c == '"' or c == '\r' or c == '\n') {
+            return true;
         }
     }
-    _ = try writer.write("\n");
+    return false;
+}
+
+fn writeQuotedBody(writer: *std.Io.Writer, field: []const u8, quote: u8) !void {
+    for (field) |c| {
+        if (c == quote) {
+            try writer.writeByte(quote);
+        }
+        try writer.writeByte(c);
+    }
 }
 
 pub fn end(self: *Self, writer: *std.Io.Writer) !void {

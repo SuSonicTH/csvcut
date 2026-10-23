@@ -4,10 +4,19 @@ const Self = @This();
 
 file: std.Io.File,
 io: std.Io,
-file_mapping: windows.HANDLE = undefined,
+file_mapping: ?windows.HANDLE = null,
 
 pub fn init(file: std.Io.File, io: std.Io, writeable: bool) !Self {
     if (builtin.target.os.tag == .windows) {
+        const size = (try file.stat(io)).size;
+        if (size == 0) {
+            // Windows cannot create a mapping for an empty file.
+            return .{
+                .file = file,
+                .io = io,
+            };
+        }
+
         const protection: windows.DWORD = if (writeable) PAGE_READWRITE else PAGE_READONLY;
         const file_mapping = CreateFileMappingA(file.handle, null, protection, 0, 0, null);
         if (file_mapping == null) {
@@ -29,19 +38,25 @@ pub fn init(file: std.Io.File, io: std.Io, writeable: bool) !Self {
 
 pub fn deinit(self: *Self) void {
     if (builtin.target.os.tag == .windows) {
-        CloseHandle(self.file_mapping);
+        if (self.file_mapping) |file_mapping| {
+            CloseHandle(file_mapping);
+        }
     }
 }
 
 pub fn map(self: *Self, comptime T: type, options: Options) ![]T {
     const len = if (options.size != 0) options.size else (try self.file.stat(self.io)).size;
+    if (len == 0) {
+        return &[_]T{};
+    }
 
     if (builtin.target.os.tag == .windows) {
         var access: windows.DWORD = 0;
         if (options.read) access |= FILE_MAP_READ;
         if (options.write) access |= FILE_MAP_WRITE;
+        if (access == 0) access = FILE_MAP_READ;
 
-        const ptr = MapViewOfFile(self.file_mapping, FILE_MAP_READ, 0, 0, len);
+        const ptr = MapViewOfFile(self.file_mapping orelse return MemMapperError.CouldNotMapRegion, access, @intCast(options.offset >> 32), @intCast(options.offset & 0xffffffff), len);
         if (ptr == null) {
             return MemMapperError.CouldNotMapRegion;
         }
@@ -50,6 +65,7 @@ pub fn map(self: *Self, comptime T: type, options: Options) ![]T {
         var prot: std.posix.PROT = .{};
         if (options.read) prot.READ = true;
         if (options.write) prot.WRITE = true;
+        if (!options.read and !options.write) prot.READ = true;
 
         return @ptrCast(try std.posix.mmap(null, len, prot, .{ .TYPE = .SHARED }, self.file.handle, options.offset));
     }
@@ -57,6 +73,9 @@ pub fn map(self: *Self, comptime T: type, options: Options) ![]T {
 
 pub fn unmap(self: *Self, memory: anytype) void {
     _ = self;
+    if (std.mem.sliceAsBytes(memory).len == 0) {
+        return;
+    }
     if (builtin.target.os.tag == .windows) {
         _ = UnmapViewOfFile(@constCast(std.mem.sliceAsBytes(memory).ptr));
     } else {

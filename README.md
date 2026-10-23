@@ -16,6 +16,7 @@ see [LICENSE.txt](LICENSE.txt)
 ## Build requirements
 To build csvcut you just need the zig compiler, which can be downloaded from [https://ziglang.org/download/](https://ziglang.org/download/) 
 Currently zig 0.17.0 is supported, builds might break in newer and older versions.
+Running `zig build test` additionally needs `bash` and `python3` for the integration tests.
 There is no installation needed, just download the package for your operating system an extract the archive and add it to your `PATH`
 
 ### Windows zig setup example for x86_64
@@ -39,6 +40,6 @@ export PATH=$(pwd)/zig-x86_64-linux-0.17.0:$PATH
 
 ## Build
 If you have zig installed and on your `PATH` just cd into the directory and execute `zig build`
-The first build takes a while and when it's finished you'll find the executeable (csvdiff or csvdiff.exe) in zig-out/bin/
-You can run the built-in unit tests with `zig build test` If everything is ok you will see no output.
-Use `zig build -Doption=ReleaseFast` to build a release version optimized for speed.
+The first build takes a while and when it's finished you'll find the executable (csvcut or csvcut.exe) in zig-out/bin/
+You can run the built-in unit and integration tests with `zig build test`.
+Use `zig build -Doptimize=ReleaseFast` to build a release version optimized for speed.

@@ -48,6 +48,7 @@ linesRead: usize = 0,
 selectedIndices: ?[]usize = null,
 excludedIndices: ?std.AutoHashMap(usize, bool) = null,
 selected: ?[][]const u8 = null,
+columnCount: ?usize = null,
 filters: ?std.array_list.Managed(Filter) = null,
 filtersOut: ?std.array_list.Managed(Filter) = null,
 
@@ -89,7 +90,28 @@ pub fn resetLinesRead(self: *Self) void {
 pub fn setSelectedIndices(self: *Self, selectedIndices: ?[]usize) !void {
     if (selectedIndices) |indices| {
         self.selectedIndices = indices;
-        self.selected = try self.allocator.alloc([]const u8, selectedIndices.?.len);
+        self.columnCount = indices.len;
+        try self.ensureSelected(indices.len);
+    }
+}
+
+pub fn setColumnCount(self: *Self, count: usize) void {
+    self.columnCount = count;
+}
+
+pub fn resetColumnCount(self: *Self) void {
+    self.columnCount = null;
+}
+
+fn ensureSelected(self: *Self, count: usize) !void {
+    if (self.selected) |selected| {
+        if (selected.len >= count) return;
+        const resized = try self.allocator.alloc([]const u8, count);
+        @memcpy(resized[0..selected.len], selected);
+        self.allocator.free(selected);
+        self.selected = resized;
+    } else {
+        self.selected = try self.allocator.alloc([]const u8, count);
     }
 }
 
@@ -113,11 +135,14 @@ pub fn setFiltersOut(self: *Self, filterOutList: ?std.array_list.Managed(Filter)
 
 pub inline fn readLine(self: *Self) !?[][]const u8 {
     while (true) {
-        if (self.inputLimit > 0 and self.inputLimit == self.linesRead) {
+        if (self.inputLimit > 0 and self.linesRead >= self.inputLimit) {
             return null;
         }
 
         try self.skipLines();
+        if (self.inputLimit > 0 and self.linesRead >= self.inputLimit) {
+            return null;
+        }
 
         self.lineNumber += 1;
         self.linesRead += 1;
@@ -136,9 +161,25 @@ pub inline fn skipOneLine(self: *Self) !void {
     _ = try self.fieldReader.getFields();
 }
 
+/// Skips the header line, applying `--skipLines` and updating the line
+/// counters exactly like `readLine` would. Used after a width-collection
+/// pass to rewind the reader to the same logical position.
+pub fn skipHeader(self: *Self) !void {
+    try self.skipLines();
+    if (self.inputLimit > 0 and self.linesRead >= self.inputLimit) {
+        return;
+    }
+    self.lineNumber += 1;
+    self.linesRead += 1;
+    _ = try self.fieldReader.getFields();
+}
+
 inline fn skipLines(self: *Self) !void {
     if (self.skipLine != null) {
         while (self.skipLine.?.get(self.lineNumber) != null) {
+            if (self.inputLimit > 0 and self.linesRead >= self.inputLimit) {
+                return;
+            }
             try self.skipOneLine();
             self.lineNumber += 1;
             self.linesRead += 1;
@@ -173,25 +214,55 @@ inline fn noFilterOrfilterMatches(self: *Self, fields: [][]const u8) bool {
 
 pub inline fn getSelectedFields(self: *Self, fields: [][]const u8) !?[][]const u8 {
     if (self.selectedIndices) |indices| {
-        for (indices, 0..) |field, index| {
-            self.selected.?[index] = fields[field];
+        try self.ensureSelected(indices.len);
+        for (indices, 0..) |fieldIndex, i| {
+            self.selected.?[i] = if (fieldIndex < fields.len) fields[fieldIndex] else "";
         }
-        return self.selected;
-    } else if (self.excludedIndices) |indices| {
-        if (self.selected == null) {
-            self.selected = try self.allocator.alloc([]const u8, fields.len);
+        return self.selected.?[0..indices.len];
+    }
+
+    if (self.excludedIndices) |indices| {
+        if (self.columnCount == null and fields.len == 0) {
+            return fields;
         }
-        var i: usize = 0;
-        for (fields, 0..) |field, index| {
-            if (!indices.contains(index)) {
-                self.selected.?[i] = field;
-                i += 1;
+        const target = self.columnCount orelse blk: {
+            var count: usize = 0;
+            for (fields, 0..) |_, index| {
+                if (!indices.contains(index)) count += 1;
             }
+            self.columnCount = count;
+            break :blk count;
+        };
+        if (target == 0) {
+            return error.NoColumnsSelected;
         }
-        return self.selected.?[0..i];
-    } else {
+        try self.ensureSelected(target);
+        var written: usize = 0;
+        var index: usize = 0;
+        while (written < target) : (index += 1) {
+            if (indices.contains(index)) continue;
+            self.selected.?[written] = if (index < fields.len) fields[index] else "";
+            written += 1;
+        }
+        return self.selected.?[0..target];
+    }
+
+    const target = self.columnCount orelse blk: {
+        if (fields.len == 0) {
+            return fields;
+        }
+        self.columnCount = fields.len;
+        break :blk fields.len;
+    };
+    if (target == fields.len) {
         return fields;
     }
+
+    try self.ensureSelected(target);
+    for (0..target) |i| {
+        self.selected.?[i] = if (i < fields.len) fields[i] else "";
+    }
+    return self.selected.?[0..target];
 }
 
 // Tests

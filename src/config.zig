@@ -10,6 +10,9 @@ const State = enum {
 };
 
 pub fn readConfigFromFile(io: std.Io, env: *const std.process.Environ.Map, name: []const u8, allocator: std.mem.Allocator) !std.array_list.Managed([]const u8) {
+    if (name.len == 0) {
+        return error.FileNotFound;
+    }
     const file = std.Io.Dir.cwd().openFile(io, name, .{}) catch blk: {
         if (name[0] == '/' or name[0] == '\\') {
             return error.FileNotFound;
@@ -171,17 +174,26 @@ inline fn moveToLeft(config: []u8, pos: usize, comptime move: u2) !void {
 
 fn getConfigFileFromHome(io: std.Io, env: *const std.process.Environ.Map, name: []const u8, allocator: std.mem.Allocator) !std.Io.File {
     if (env.get("CSVCUT_CONFIG")) |config| {
-        return openConfigFile(io, config, "", "", name, allocator);
-    } else if (env.get("HOME")) |home| {
-        return openConfigFile(io, home, ".config/csvcut/", "", name, allocator);
+        if (config.len > 0) return openConfigFile(io, config, "", "", name, allocator);
+    }
+    if (env.get("HOME")) |home| {
+        if (home.len > 0) return openConfigFile(io, home, ".config/csvcut/", "", name, allocator);
     } else if (builtin.target.os.tag == .windows) {
         if (env.get("homedrive")) |homedrive| {
             if (env.get("homepath")) |homepath| {
-                return openConfigFile(io, homedrive, homepath, ".config/csvcut/", name, allocator);
+                if (homedrive.len > 0) return openConfigFile(io, homedrive, homepath, ".config/csvcut/", name, allocator);
             }
         }
     }
     return error.ReadingConfig;
+}
+
+fn appendSeparatorIfNeeded(path: *std.array_list.Managed(u8)) !void {
+    if (path.items.len == 0) return;
+    const last = path.items[path.items.len - 1];
+    if (last != '/' and last != '\\') {
+        try path.append('/');
+    }
 }
 
 fn openConfigFile(io: std.Io, home: []const u8, sub1: []const u8, sub2: []const u8, name: []const u8, allocator: std.mem.Allocator) !std.Io.File {
@@ -189,21 +201,16 @@ fn openConfigFile(io: std.Io, home: []const u8, sub1: []const u8, sub2: []const 
     defer path.deinit();
 
     try path.appendSlice(home);
-    if (path.items[path.items.len - 1] != '/' and path.items[path.items.len - 1] != '\\') {
-        try path.append('/');
-    }
-
+    try appendSeparatorIfNeeded(&path);
     try path.appendSlice(sub1);
-    if (path.items[path.items.len - 1] != '/' and path.items[path.items.len - 1] != '\\') {
-        try path.append('/');
-    }
-
+    try appendSeparatorIfNeeded(&path);
     try path.appendSlice(sub2);
-    if (path.items[path.items.len - 1] != '/' and path.items[path.items.len - 1] != '\\') {
-        try path.append('/');
-    }
-
+    try appendSeparatorIfNeeded(&path);
     try path.appendSlice(name);
+
+    if (path.items.len == 0) {
+        return error.ReadingConfig;
+    }
 
     return try std.Io.Dir.cwd().openFile(io, path.items, .{});
 }
@@ -225,7 +232,7 @@ test "reads it" {
     try expectEqualStrings("1,2,3", arguments.items[2]);
     try expectEqualStrings("--trim", arguments.items[3]);
     try expectEqualStrings("-I", arguments.items[4]);
-    try expectEqualStrings("quouted argument, with , spaces", arguments.items[5]);
+    try expectEqualStrings("quoted argument, with , spaces", arguments.items[5]);
     try expectEqualStrings("--include", arguments.items[6]);
     try expectEqualStrings("another one with spaces", arguments.items[7]);
     try expectEqualStrings("--separator", arguments.items[8]);

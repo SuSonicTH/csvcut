@@ -1,11 +1,13 @@
 const std = @import("std");
 const runtime = @import("../runtime.zig");
+const escape = @import("escape.zig");
 const Self = @This();
 
 pub const Options = struct {};
 
 options: Options,
 lineCount: usize = 0,
+bodyOpen: bool = false,
 
 pub fn init(options: Options) !Self {
     return .{
@@ -15,33 +17,33 @@ pub fn init(options: Options) !Self {
 
 pub fn start(self: *Self, writer: *std.Io.Writer) !void {
     _ = self;
-    _ = try writer.write("<html><body>\n");
-    _ = try writer.write("<style>\n");
-    _ = try writer.write(@embedFile("HtmlTable.css"));
-    _ = try writer.write("\n</style>\n");
-    _ = try writer.write("<table class=\"styled-table\">\n");
+    try writer.writeAll("<html><body>\n");
+    try writer.writeAll("<style>\n");
+    try writer.writeAll(@embedFile("HtmlTable.css"));
+    try writer.writeAll("\n</style>\n");
+    try writer.writeAll("<table class=\"styled-table\">\n");
 }
 
 pub fn writeHeader(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
-    _ = self;
-    _ = try writer.write("<thead><tr>");
+    try writer.writeAll("<thead><tr>");
     for (fields.*) |field| {
-        _ = try writer.write("<th>");
-        _ = try writer.write(field);
-        _ = try writer.write("</th>");
+        try writer.writeAll("<th>");
+        try escape.writeHtml(writer, field);
+        try writer.writeAll("</th>");
     }
-    _ = try writer.write("</tr></thead>\n");
-    _ = try writer.write("<tbody>");
+    try writer.writeAll("</tr></thead>\n");
+    try writer.writeAll("<tbody>");
+    self.bodyOpen = true;
 }
 
 pub fn writeData(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
-    _ = try writer.write("<tr>");
+    try writer.writeAll("<tr>");
     for (fields.*) |field| {
-        _ = try writer.write("<td>");
-        _ = try writer.write(field);
-        _ = try writer.write("</td>");
+        try writer.writeAll("<td>");
+        try escape.writeHtml(writer, field);
+        try writer.writeAll("</td>");
     }
-    _ = try writer.write("</tr>\n");
+    try writer.writeAll("</tr>\n");
 
     self.lineCount += 1;
     if (self.lineCount == 50000) {
@@ -54,6 +56,8 @@ pub fn writeData(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u
 }
 
 pub fn end(self: *Self, writer: *std.Io.Writer) !void {
-    _ = self;
-    _ = try writer.write("</tbody></table></body></html>\n");
+    if (self.bodyOpen) {
+        try writer.writeAll("</tbody>");
+    }
+    try writer.writeAll("</table></body></html>\n");
 }

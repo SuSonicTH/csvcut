@@ -1,47 +1,61 @@
 const std = @import("std");
+const escape = @import("escape.zig");
 const Self = @This();
 
 allocator: std.mem.Allocator,
 firstLine: bool = true,
-header: *const [][]const u8 = undefined,
+header: ?[][]const u8 = null,
 
-pub fn init(allocator: std.mem.Allocator) !Self {
+pub fn init(allocator: std.mem.Allocator, header: ?[][]const u8) !Self {
     return .{
         .allocator = allocator,
+        .header = header,
     };
 }
 
 pub fn start(self: *Self, writer: *std.Io.Writer) !void {
     _ = self;
-    _ = try writer.write("[\n");
+    try writer.writeAll("[\n");
 }
 
 pub fn writeHeader(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     _ = writer;
-    self.header = fields;
+    self.header = fields.*;
 }
 
 pub fn writeData(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     if (!self.firstLine) {
-        _ = try writer.write(",\n");
+        try writer.writeAll(",\n");
     } else {
         self.firstLine = false;
     }
-    _ = try writer.write("{");
-    for (self.header.*, 0..) |name, i| {
-        if (i > 0) {
-            _ = try writer.write(", ");
+    try writer.writeAll("{");
+    if (self.header) |header| {
+        for (header, 0..) |name, i| {
+            if (i > 0) {
+                try writer.writeAll(", ");
+            }
+            try escape.writeJsonString(writer, name);
+            try writer.writeAll(": ");
+            if (i < fields.*.len) {
+                try escape.writeJsonString(writer, fields.*[i]);
+            } else {
+                try writer.writeAll("\"\"");
+            }
         }
-        _ = try writer.write("\"");
-        _ = try writer.write(name);
-        _ = try writer.write("\": \"");
-        _ = try writer.write(fields.*[i]);
-        _ = try writer.write("\"");
+    } else {
+        for (fields.*, 0..) |field, i| {
+            if (i > 0) {
+                try writer.writeAll(", ");
+            }
+            _ = try writer.print("\"{d}\": ", .{i + 1});
+            try escape.writeJsonString(writer, field);
+        }
     }
-    _ = try writer.write("}");
+    try writer.writeAll("}");
 }
 
 pub fn end(self: *Self, writer: *std.Io.Writer) !void {
     _ = self;
-    _ = try writer.write("\n]\n");
+    try writer.writeAll("\n]\n");
 }

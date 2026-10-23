@@ -1,18 +1,28 @@
-Usage: csvcut [OPTION]... [FILE]...
+Usage: csvcut [OPTION]... FILE...
 
-processes csv files or stdin and outputs in different tabular formats
+processes csv files and outputs in different tabular formats
 optionally does line filtering/limiting or selecting of columns
 
+Each FILE is processed independently. Formats that emit a complete document
+(json, jsonArray, html, htmlHandson, excelXml) emit one document per FILE.
+Input on stdin is not supported.
+
+A file named default.config in the current directory is loaded automatically
+before the command line arguments are applied.
+
 Options:
--h, --help                     display this help and exit
+    --help                     display this help and exit
 -v, --version                  display version/license and exit
--l, --listHeader               print the file header and exit
+-l, --listHeader               print the header of the first file and exit
     --exitCodes                print a list of all exit codes
     --config [file]            config file with list of arguments
                                file is searched in current directory
                                then in $HOME/.config/csvcut
-                               pauses argument processing an applies config
+                               ($CSVCUT_CONFIG overrides the config directory)
+                               pauses argument processing and applies config
                                then continues to apply command line arguments
+    --time                     print the processing time to stderr
+
  input:
   -s, --separator sep          use sep as input field separator
       sep can be one of:
@@ -20,23 +30,26 @@ Options:
          comma (,) {Default}
          semicolon (;)
          pipe (|)
- 
-  -q, --quote no               no quouting {default for performance}
-  -q, --quote single           use single quouttes (')
-  -q, --quote double           use double quoutes (")
- 
-  -h, --header [field,...]     use given heder [field1,field2,...]
-  -n, --noHeader               file has no header
-      --skipLines list         skip lines numbers in list
-                               indices as 0-based, header has zero index
 
-      --inputLimit  lim        limit the input processing to lim lines
+  -q, --quote no               no quoting {default for performance}
+  -q, --quote single           use single quotes (')
+  -q, --quote double           use double quotes (")
+                               quoted fields cannot span multiple lines
+
+  -h, --header [field,...]     use given header [field1,field2,...]
+  -n, --noHeader               file has no header
+      --skipLines list         skip line numbers in list
+                               indices are 0-based, the header has index 0
+
+      --inputLimit lim         limit the input processing to lim lines
+                               includes the header and skipped lines
       --lengths [1,2,3]        comma separated list of field lengths
-                               processes input as fixed filed (record) length
- 
-      --extraLF                with --lengths to read an extra end of line
-      --extraCRLF              with --lengths to read 2 extra EOL characters
- 
+                               processes input as fixed field (record) length
+                               all lengths must be greater than 0
+
+      --extraLF                with --lengths read an extra end of line
+      --extraCRLF              with --lengths read 2 extra EOL characters
+
  output formats:
   --format csv                 csv file for format options see output section
   --format lazyMarkdown        compact markdown table format
@@ -44,34 +57,37 @@ Options:
   --format lazyJira            compact jira/confluence markup table format
   --format jira                evenly spaced jira/confluence table (slower)
   --format table               evenly spaced console table format (slower)
+                               note: column widths are measured in bytes,
+                               wide or combining characters may misalign
   --format html                plain html with a table
   --format htmlHandson         html with HandsonTable (sorting, filtering,...)
   --format json                json with array of objects
   --format jsonArray           json with an array of arrays
-  --format excelXml            excel xml file. Save with .xls extention
-                                  gives warning in Excel about incorrect extension
-                                  but opens without a problem
- 
+  --format excelXml            excel xml file. Save with .xls extension
+                                 gives warning in Excel about incorrect extension
+                                 but opens without a problem
+
  output:
   -o, --output [file]          write output to file [file]
-  -S, --outputSeparator [sep]  use [sep] as input field separator
+  -S, --outputSeparator [sep]  use [sep] as output field separator
                                sep can be one of:
                                  tab (\t)
                                  comma (,) {Default}
                                  semicolon (;)
                                  pipe (|)
 
-  -Q, --quoteOutput no         no quouting {default for performance}
-  -Q, --quoteOutput single     use single quouttes (')
-  -Q, --quoteOutput double     use double quoutes (")
+  -Q, --outputQuote no         quote fields only when required {default}
+  -Q, --outputQuote single     quote every field with single quotes (')
+  -Q, --outputQuote double     quote every field with double quotes (")
 
   -N, --outputNoHeader         don't write header to output
- 
-      --outputLimit lim        limit the the number of lines outputted to lim
+
+      --outputLimit lim        limit the number of lines outputted to lim
 
   processing:
   -I, --include [1,2,3]        comma separated list of field names/indices
-                               use backshlash to escape numeric field names
+                               indices are 1-based
+                               use a backslash to escape numeric field names
                                can be used multiple times
                                numeric ranges can be used e.g. 3-6
                                cannot be used with --exclude
@@ -82,11 +98,11 @@ Options:
 
       --filter [filter,..]     list of filters that are applied
                                argument field1=value,field2~regex,....
-                               only lines were all fields are matching are outputted
+                               only lines where all fields are matching are outputted
 
                                field=value => the value has to match exactly
                                field~regex => the regular expression has to match
-                               
+
                                can be used multiple times, if any filter matches
                                the line will be output
 

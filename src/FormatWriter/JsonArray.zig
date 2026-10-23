@@ -1,4 +1,5 @@
 const std = @import("std");
+const escape = @import("escape.zig");
 const Self = @This();
 
 firstLine: bool = true,
@@ -9,7 +10,7 @@ pub fn init() !Self {
 
 pub fn start(self: *Self, writer: *std.Io.Writer) !void {
     _ = self;
-    _ = try writer.write("[\n");
+    try writer.writeAll("[\n");
 }
 
 pub fn writeHeader(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
@@ -20,23 +21,21 @@ pub fn writeHeader(self: *Self, writer: *std.Io.Writer, fields: *const [][]const
 
 pub fn writeData(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     if (!self.firstLine) {
-        _ = try writer.write(",\n");
+        try writer.writeAll(",\n");
     } else {
         self.firstLine = false;
     }
-    _ = try writer.write("[");
+    try writer.writeAll("[");
     for (fields.*, 0..) |field, i| {
         if (i > 0) {
-            _ = try writer.write(", ");
+            try writer.writeAll(", ");
         }
-        _ = try writer.write("\"");
-        _ = try writer.write(field);
-        _ = try writer.write("\"");
+        try escape.writeJsonString(writer, field);
     }
-    _ = try writer.write("]");
+    try writer.writeAll("]");
 }
 
 pub fn end(self: *Self, writer: *std.Io.Writer) !void {
     _ = self;
-    _ = try writer.write("\n]\n");
+    try writer.writeAll("\n]\n");
 }

@@ -11,12 +11,13 @@ const Self = @This();
 allocator: std.mem.Allocator,
 memMapper: MemMapper,
 trim: bool,
-data: []u8 = undefined,
+data: []u8 = &.{},
 fieldProperties: ?[]FieldProperty = null,
 recordSize: usize = 0,
-fields: ?[][]const u8 = undefined,
+fields: ?[][]const u8 = null,
 pos: usize = 0,
 extraLineEnd: u2,
+lineBuffer: []u8 = &.{},
 
 pub fn init(file: *std.Io.File, io: std.Io, widhts: []const usize, trim: bool, extraLineEnd: u2, allocator: std.mem.Allocator) !Self {
     var reader: Self = .{
@@ -38,7 +39,7 @@ fn calculateFieldProperties(widhts: []const usize, recordSize: *usize, allocator
     for (widhts, 0..) |width, i| {
         fieldProperties[i].pos = start;
         fieldProperties[i].length = width;
-        start += width;
+        start = std.math.add(usize, start, width) catch return error.RecordSizeOverflow;
     }
     recordSize.* = start;
     return fieldProperties[0..widhts.len];
@@ -53,6 +54,9 @@ pub fn deinit(self: *Self) void {
     if (self.fields) |fields| {
         self.allocator.free(fields);
     }
+    if (self.lineBuffer.len > 0) {
+        self.allocator.free(self.lineBuffer);
+    }
 }
 
 pub fn reset(self: *Self) void {
@@ -62,10 +66,12 @@ pub fn reset(self: *Self) void {
 pub fn getFields(self: *Self) !?[][]const u8 {
     if (try self.readLine()) |line| {
         for (self.fieldProperties.?, 0..) |property, i| {
+            const start = @min(property.pos, line.len);
+            const end = @min(property.pos +| property.length, line.len);
             if (self.trim) {
-                self.fields.?[i] = std.mem.trim(u8, line[property.pos .. property.pos + property.length], " \t");
+                self.fields.?[i] = std.mem.trim(u8, line[start..end], " \t");
             } else {
-                self.fields.?[i] = line[property.pos .. property.pos + property.length];
+                self.fields.?[i] = line[start..end];
             }
         }
         return self.fields;
@@ -74,12 +80,54 @@ pub fn getFields(self: *Self) !?[][]const u8 {
 }
 
 inline fn readLine(self: *Self) !?[]const u8 {
-    if (self.pos + self.recordSize <= self.data.len) {
-        const current = self.pos;
-        self.pos += self.recordSize + self.extraLineEnd;
-        return self.data[current .. current + self.recordSize];
+    if (self.recordSize == 0 or self.pos >= self.data.len) {
+        return null;
     }
-    return null;
+
+    const current = self.pos;
+    const remaining = self.data.len - current;
+    if (remaining < self.recordSize) {
+        const bodyLength = self.partialBodyLength(self.data[current..]);
+
+        // A record size larger than the file cannot produce a full record;
+        // return the remaining bytes and let field extraction clamp them.
+        if (self.recordSize > self.data.len) {
+            self.pos = self.data.len;
+            return self.data[current..][0..bodyLength];
+        }
+
+        // Pad the last, incomplete record with spaces so no data is dropped.
+        if (self.lineBuffer.len < self.recordSize) {
+            if (self.lineBuffer.len == 0) {
+                self.lineBuffer = try self.allocator.alloc(u8, self.recordSize);
+            } else {
+                self.lineBuffer = try self.allocator.realloc(self.lineBuffer, self.recordSize);
+            }
+        }
+        @memset(self.lineBuffer, ' ');
+        @memcpy(self.lineBuffer[0..bodyLength], self.data[current..][0..bodyLength]);
+        self.pos = self.data.len;
+        return self.lineBuffer[0..self.recordSize];
+    }
+
+    self.pos = current +| self.recordSize +| self.extraLineEnd;
+    return self.data[current .. current + self.recordSize];
+}
+
+fn partialBodyLength(self: *Self, data: []const u8) usize {
+    var length = data.len;
+    if (self.extraLineEnd == 0 or length == 0) {
+        return length;
+    }
+    if (data[length - 1] == '\n') {
+        length -= 1;
+        if (self.extraLineEnd == 2 and length > 0 and data[length - 1] == '\r') {
+            length -= 1;
+        }
+    } else if (data[length - 1] == '\r') {
+        length -= 1;
+    }
+    return length;
 }
 
 // Tests
@@ -169,5 +217,20 @@ test "fields trimmed" {
     try expectEqualStringsArray(&[_][]const u8{ "A", "B", "C", "D" }, (try reader.getFields()).?);
     try expectEqualStringsArray(&[_][]const u8{ "1", "2", "3", "4" }, (try reader.getFields()).?);
     try expectEqualStringsArray(&[_][]const u8{ "12", "1234", "123456", "1234567890" }, (try reader.getFields()).?);
+    try testing.expectEqual(null, try reader.getFields());
+}
+
+test "partial last record is padded" {
+    const fileName: []const u8 = "./test/fixedLenTest.dat";
+    try writeFile(fileName, "A B   C     D         1 2");
+
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
+
+    var reader = try init(&file, std.testing.io, &.{ 2, 4, 6, 10 }, false, 0, testing.allocator);
+    defer reader.deinit();
+
+    try expectEqualStringsArray(&[_][]const u8{ "A ", "B   ", "C     ", "D         " }, (try reader.getFields()).?);
+    try expectEqualStringsArray(&[_][]const u8{ "1 ", "2   ", "      ", "          " }, (try reader.getFields()).?);
     try testing.expectEqual(null, try reader.getFields());
 }

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 function print_help() {
-    echo "csvdiff build"
+    echo "csvcut build"
     echo ""
     echo "usage ./build.sh [OPTIONs]"
     echo ""
@@ -56,7 +56,7 @@ case "$(uname -s)" in
     Darwin*)    HOST_OS='mac';;
     MINGW*)     HOST_OS='windows';;
     MSYS_NT*)   HOST_OS='windows';;
-    *)          HOST_OS="UNKNOWN:${unameOut}"
+    *)          HOST_OS="UNKNOWN:$(uname -s)";;
 esac
 
 if [ "$CLEAN" == "true" ]; then

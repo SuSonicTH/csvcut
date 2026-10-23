@@ -28,19 +28,19 @@ pub const FormatWriter = union(OutputFormat) {
     jsonArray: JsonArray,
     excelXml: ExcelXml,
 
-    pub fn init(options: Options, allocator: std.mem.Allocator, fieldWidths: FieldWidths) !FormatWriter {
+    pub fn init(options: Options, allocator: std.mem.Allocator, fieldWidths: FieldWidths, header: ?[][]const u8) !FormatWriter {
         return switch (options.outputFormat) {
-            .csv => .{ .csv = try CsvWriter.init(.{ .separator = options.outputSeparator, .quoute = options.outputQuoute }) },
+            .csv => .{ .csv = try CsvWriter.init(.{ .separator = options.outputSeparator, .quote = options.outputQuote }) },
             .lazyMarkdown => .{ .lazyMarkdown = try LazyMarkdown.init() },
             .lazyJira => .{ .lazyJira = try LazyJira.init() },
             .markdown => .{ .markdown = try Markdown.init(allocator, fieldWidths) },
             .jira => .{ .jira = try Jira.init(allocator, fieldWidths) },
             .table => .{ .table = try Table.init(allocator, fieldWidths) },
             .html => .{ .html = try Html.init(.{}) },
-            .htmlHandson => .{ .htmlHandson = try HtmlHandson.init() },
-            .json => .{ .json = try Json.init(allocator) },
+            .htmlHandson => .{ .htmlHandson = try HtmlHandson.init(options.outputHeader, header) },
+            .json => .{ .json = try Json.init(allocator, header) },
             .jsonArray => .{ .jsonArray = try JsonArray.init() },
-            .excelXml => .{ .excelXml = try ExcelXml.init(allocator) },
+            .excelXml => .{ .excelXml = try ExcelXml.init(allocator, header, options.outputHeader) },
         };
     }
 

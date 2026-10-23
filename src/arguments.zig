@@ -14,7 +14,7 @@ const Argument = enum {
     @"-s",
     @"--separator",
     @"-q",
-    @"--quoute",
+    @"--quote",
     @"-h",
     @"--header",
     @"-n",
@@ -22,7 +22,7 @@ const Argument = enum {
     @"-S",
     @"--outputSeparator",
     @"-Q",
-    @"--outputQuoute",
+    @"--outputQuote",
     @"-N",
     @"--outputNoHeader",
     @"-I",
@@ -61,7 +61,7 @@ const Separator = enum {
     @"\t",
 };
 
-const Quoute = enum {
+const Quote = enum {
     no,
     single,
     @"'",
@@ -70,17 +70,31 @@ const Quoute = enum {
 };
 
 pub const Parser = struct {
-    var skip_next: bool = false;
+    const max_config_depth: usize = 16;
 
     pub fn parse(options: *Options, args: [][]const u8, allocator: std.mem.Allocator) !void {
-        if (args.len == 1) {
+        try parseDepth(options, args, allocator, 0);
+    }
+
+    /// Parses an automatically loaded config file. Unlike the command line,
+    /// an empty config file is valid.
+    pub fn parseConfig(options: *Options, args: [][]const u8, allocator: std.mem.Allocator) !void {
+        try parseDepth(options, args, allocator, 1);
+    }
+
+    fn parseDepth(options: *Options, args: [][]const u8, allocator: std.mem.Allocator, depth: usize) !void {
+        if (depth == 0 and args.len == 1) {
             try ExitCode.noArgumentError.printErrorAndExit(.{});
         }
 
+        var skip_next: bool = false;
         for (args[1..], 1..) |arg, index| {
             if (skip_next) {
                 skip_next = false;
                 continue;
+            }
+            if (arg.len == 0) {
+                try ExitCode.emptyArgument.printErrorAndExit(.{});
             }
             if (arg[0] == '-') {
                 switch (std.meta.stringToEnum(Argument, arg) orelse {
@@ -88,15 +102,27 @@ pub const Parser = struct {
                 }) {
                     .@"--help" => try printUsage(),
                     .@"-v", .@"--version" => try printVersion(),
-                    .@"-s", .@"--separator" => options.inputSeparator = try getSeparator(args, index, arg),
-                    .@"-q", .@"--quoute" => options.inputQuoute = try getQuoute(args, index, arg),
-                    .@"-S", .@"--outputSeparator" => options.outputSeparator = try getSeparator(args, index, arg),
-                    .@"-Q", .@"--outputQuoute" => options.outputQuoute = try getQuoute(args, index, arg),
+                    .@"-s", .@"--separator" => {
+                        options.inputSeparator = try getSeparator(args, index, arg);
+                        skip_next = true;
+                    },
+                    .@"-q", .@"--quote" => {
+                        options.inputQuote = try getQuote(args, index, arg);
+                        skip_next = true;
+                    },
+                    .@"-S", .@"--outputSeparator" => {
+                        options.outputSeparator = try getSeparator(args, index, arg);
+                        skip_next = true;
+                    },
+                    .@"-Q", .@"--outputQuote" => {
+                        options.outputQuote = try getQuote(args, index, arg);
+                        skip_next = true;
+                    },
                     .@"--trim" => options.trim = true,
                     .@"-l", .@"--listHeader" => options.listHeader = true,
                     .@"-o", .@"--output" => {
                         options.outputName = try argumentValue(args, index, arg);
-                        skipNext();
+                        skip_next = true;
                     },
                     .@"--unique" => {
                         if (options.count) try ExitCode.countAndUniqueAreExclusive.printErrorAndExit(.{});
@@ -112,65 +138,123 @@ pub const Parser = struct {
                         } else {
                             try ExitCode.argumentWithUnknownValueError.printErrorAndExit(.{ arg, try argumentValue(args, index, arg) });
                         }
-                        skipNext();
+                        skip_next = true;
                     },
                     .@"-h", .@"--header" => {
-                        try options.setHeader(try argumentValue(args, index, arg));
+                        const value = try argumentValue(args, index, arg);
+                        options.setHeader(value) catch |err| switch (err) {
+                            error.FoundEndOfLineAfterOpeningQuote => ExitCode.invalidHeaderValue.printErrorAndExit(.{value}),
+                            else => return err,
+                        };
                         options.fileHeader = false;
-                        skipNext();
+                        skip_next = true;
                     },
                     .@"-n", .@"--noHeader" => options.fileHeader = false,
                     .@"-N", .@"--outputNoHeader" => options.outputHeader = false,
                     .@"-I", .@"--include" => {
-                        options.addInclude(try argumentValue(args, index, arg)) catch |err| {
-                            switch (err) {
-                                error.IncludeAndExcludeTogether => try ExitCode.includeAndExcludeTogether.printErrorAndExit(.{}),
-                                else => return err,
-                            }
+                        const value = try argumentValue(args, index, arg);
+                        if (value.len == 0) {
+                            try ExitCode.emptyFieldInSelection.printErrorAndExit(.{});
+                        }
+                        addSelection(options, value, true) catch |err| switch (err) {
+                            error.IncludeAndExcludeTogether => ExitCode.includeAndExcludeTogether.printErrorAndExit(.{}),
+                            error.InvalidIndex => ExitCode.invalidFieldIndex.printErrorAndExit(.{value}),
+                            error.InvalidRange => ExitCode.invalidFieldRange.printErrorAndExit(.{value}),
+                            error.EmptyField => ExitCode.emptyFieldInSelection.printErrorAndExit(.{}),
+                            else => return err,
                         };
-                        skipNext();
+                        skip_next = true;
                     },
                     .@"-E", .@"--exclude" => {
-                        options.addExclude(try argumentValue(args, index, arg)) catch |err| {
-                            switch (err) {
-                                error.IncludeAndExcludeTogether => try ExitCode.includeAndExcludeTogether.printErrorAndExit(.{}),
-                                else => return err,
-                            }
-                            return err;
+                        const value = try argumentValue(args, index, arg);
+                        if (value.len == 0) {
+                            try ExitCode.emptyFieldInSelection.printErrorAndExit(.{});
+                        }
+                        addSelection(options, value, false) catch |err| switch (err) {
+                            error.IncludeAndExcludeTogether => ExitCode.includeAndExcludeTogether.printErrorAndExit(.{}),
+                            error.InvalidIndex => ExitCode.invalidFieldIndex.printErrorAndExit(.{value}),
+                            error.InvalidRange => ExitCode.invalidFieldRange.printErrorAndExit(.{value}),
+                            error.EmptyField => ExitCode.emptyFieldInSelection.printErrorAndExit(.{}),
+                            else => return err,
                         };
-                        skipNext();
+                        skip_next = true;
                     },
                     .@"--filter" => {
-                        try options.addFilter(try argumentValue(args, index, arg));
-                        skipNext();
+                        const value = try argumentValue(args, index, arg);
+                        if (value.len == 0) {
+                            try ExitCode.emptyFieldInSelection.printErrorAndExit(.{});
+                        }
+                        options.addFilter(value) catch |err| switch (err) {
+                            error.NoEqualOrTildeInFilter => ExitCode.invalidFilter.printErrorAndExit(.{value}),
+                            error.InvalidIndex => ExitCode.invalidFieldIndex.printErrorAndExit(.{value}),
+                            error.InvalidRange => ExitCode.invalidFieldRange.printErrorAndExit(.{value}),
+                            error.EmptyField => ExitCode.emptyFieldInSelection.printErrorAndExit(.{}),
+                            else => return err,
+                        };
+                        skip_next = true;
                     },
                     .@"--filterOut" => {
-                        try options.addFilterOut(try argumentValue(args, index, arg));
-                        skipNext();
+                        const value = try argumentValue(args, index, arg);
+                        if (value.len == 0) {
+                            try ExitCode.emptyFieldInSelection.printErrorAndExit(.{});
+                        }
+                        options.addFilterOut(value) catch |err| switch (err) {
+                            error.NoEqualOrTildeInFilter => ExitCode.invalidFilter.printErrorAndExit(.{value}),
+                            error.InvalidIndex => ExitCode.invalidFieldIndex.printErrorAndExit(.{value}),
+                            error.InvalidRange => ExitCode.invalidFieldRange.printErrorAndExit(.{value}),
+                            error.EmptyField => ExitCode.emptyFieldInSelection.printErrorAndExit(.{}),
+                            else => return err,
+                        };
+                        skip_next = true;
                     },
                     .@"--skipLines" => {
-                        try options.addSkipLines(try argumentValue(args, index, arg));
-                        skipNext();
+                        const value = try argumentValue(args, index, arg);
+                        options.addSkipLines(value) catch |err| switch (err) {
+                            error.InvalidNumber => ExitCode.invalidNumberValue.printErrorAndExit(.{ value, arg }),
+                            else => return err,
+                        };
+                        skip_next = true;
                     },
                     .@"--exitCodes" => try ExitCode.printExitCodes(),
                     .@"--inputLimit" => {
-                        try options.setInputLimit(try argumentValue(args, index, arg));
-                        skipNext();
+                        const value = try argumentValue(args, index, arg);
+                        options.setInputLimit(value) catch |err| switch (err) {
+                            error.InvalidNumber => ExitCode.invalidNumberValue.printErrorAndExit(.{ value, arg }),
+                            else => return err,
+                        };
+                        skip_next = true;
                     },
                     .@"--outputLimit" => {
-                        try options.setOutputLimit(try argumentValue(args, index, arg));
-                        skipNext();
+                        const value = try argumentValue(args, index, arg);
+                        options.setOutputLimit(value) catch |err| switch (err) {
+                            error.InvalidNumber => ExitCode.invalidNumberValue.printErrorAndExit(.{ value, arg }),
+                            else => return err,
+                        };
+                        skip_next = true;
                     },
                     .@"--lengths" => {
-                        try options.setLenghts(try argumentValue(args, index, arg));
-                        skipNext();
+                        const value = try argumentValue(args, index, arg);
+                        options.setLenghts(value) catch |err| switch (err) {
+                            error.InvalidLength => ExitCode.invalidFieldLength.printErrorAndExit(.{value}),
+                            else => return err,
+                        };
+                        skip_next = true;
                     },
                     .@"--extraLF" => options.extraLineEnd = 1,
                     .@"--extraCRLF" => options.extraLineEnd = 2,
                     .@"--config" => {
-                        const arguments = try readConfigFromFile(runtime.io, runtime.environ, try argumentValue(args, index, arg), allocator);
-                        try parse(options, arguments.items, allocator);
-                        skipNext();
+                        const value = try argumentValue(args, index, arg);
+                        if (value.len == 0) {
+                            try ExitCode.emptyArgument.printErrorAndExit(.{});
+                        }
+                        if (depth >= max_config_depth) {
+                            ExitCode.configRecursion.printErrorAndExit(.{max_config_depth});
+                        }
+                        const defaultArguments = readConfigFromFile(runtime.io, runtime.environ, value, allocator) catch |err| {
+                            ExitCode.couldNotOpenConfigFile.printErrorAndExit(.{ value, err });
+                        };
+                        try parseDepth(options, defaultArguments.items, allocator, depth + 1);
+                        skip_next = true;
                     },
                     .@"--time" => {
                         options.time = true;
@@ -182,9 +266,16 @@ pub const Parser = struct {
         }
     }
 
+    fn addSelection(options: *Options, value: []const u8, include: bool) !void {
+        if (include) {
+            try options.addInclude(value);
+        } else {
+            try options.addExclude(value);
+        }
+    }
+
     fn getSeparator(args: [][]const u8, index: usize, arg: []const u8) ![1]u8 {
         const sep = try argumentValue(args, index, arg);
-        skipNext();
         switch (std.meta.stringToEnum(Separator, sep) orelse {
             try ExitCode.argumentWithUnknownValueError.printErrorAndExit(.{ arg, sep });
         }) {
@@ -195,20 +286,15 @@ pub const Parser = struct {
         }
     }
 
-    fn getQuoute(args: [][]const u8, index: usize, arg: []const u8) !?[1]u8 {
-        const quoute = try argumentValue(args, index, arg);
-        skipNext();
-        switch (std.meta.stringToEnum(Quoute, quoute) orelse {
-            try ExitCode.argumentWithUnknownValueError.printErrorAndExit(.{ arg, quoute });
+    fn getQuote(args: [][]const u8, index: usize, arg: []const u8) !?[1]u8 {
+        const quote = try argumentValue(args, index, arg);
+        switch (std.meta.stringToEnum(Quote, quote) orelse {
+            try ExitCode.argumentWithUnknownValueError.printErrorAndExit(.{ arg, quote });
         }) {
             .no => return null,
             .single, .@"'" => return .{'\''},
             .double, .@"\"" => return .{'"'},
         }
-    }
-
-    inline fn skipNext() void {
-        skip_next = true;
     }
 
     fn argumentValue(args: [][]const u8, index: usize, argument: []const u8) ![]const u8 {
@@ -243,5 +329,10 @@ pub const Parser = struct {
 
     pub fn validateArguments(options: *Options) !void {
         if (options.lengths == null and (options.extraLineEnd > 0)) ExitCode.extraLfWithoutLength.printErrorAndExit(.{});
+        if (options.inputFiles.items.len == 0) {
+            if (!(options.listHeader and options.header != null)) {
+                ExitCode.noInputError.printErrorAndExit(.{});
+            }
+        }
     }
 };

@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -58,6 +59,22 @@ pub fn build(b: *std.Build) void {
     });
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
-    const test_step = b.step("test", "Run unit tests");
+    const test_step = b.step("test", "Run unit and integration tests");
     test_step.dependOn(&run_unit_tests.step);
+
+    // The integration suite executes the built binary, so only run it when the
+    // build targets the host platform (and a POSIX shell is available).
+    if (builtin.target.os.tag != .windows and
+        target.result.os.tag == builtin.target.os.tag and
+        target.result.cpu.arch == builtin.target.cpu.arch)
+    {
+        const integration = b.addSystemCommand(&.{ "bash", "test/integration.sh" });
+        integration.has_side_effects = true;
+        integration.addArtifactArg(exe);
+
+        const integration_step = b.step("integration", "Run integration tests");
+        integration_step.dependOn(&integration.step);
+
+        test_step.dependOn(&integration.step);
+    }
 }

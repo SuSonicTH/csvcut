@@ -15,19 +15,19 @@ pub fn writeHeader(self: *Self, writer: *std.Io.Writer, fields: *const [][]const
     try self.writeData(writer, fields);
     for (fields.*) |field| {
         _ = field;
-        _ = try writer.write("| --- ");
+        try writer.writeAll("| --- ");
     }
-    _ = try writer.write("|\n");
+    try writer.writeAll("|\n");
 }
 
 pub fn writeData(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     _ = self;
     for (fields.*) |field| {
-        _ = try writer.write("| ");
-        _ = try writer.write(try escape.markdown(field));
-        _ = try writer.write(" ");
+        try writer.writeAll("| ");
+        try escape.writeMarkdown(writer, field);
+        try writer.writeAll(" ");
     }
-    _ = try writer.write("|\n");
+    try writer.writeAll("|\n");
 }
 
 pub fn end(self: *Self, writer: *std.Io.Writer) !void {

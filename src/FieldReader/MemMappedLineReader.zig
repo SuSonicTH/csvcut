@@ -3,7 +3,7 @@ const MemMapper = @import("MemMapper.zig");
 
 memMapper: MemMapper,
 includeEol: bool,
-data: []u8 = undefined,
+data: []u8 = &.{},
 next: usize = 0,
 
 const Self = @This();

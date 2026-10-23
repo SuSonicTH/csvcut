@@ -14,21 +14,21 @@ pub fn start(self: *Self, writer: *std.Io.Writer) !void {
 pub fn writeHeader(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     _ = self;
     for (fields.*) |field| {
-        _ = try writer.write("||");
-        _ = try writer.write(try escape.jira(field));
-        _ = try writer.write(" ");
+        try writer.writeAll("||");
+        try escape.writeJira(writer, field);
+        try writer.writeAll(" ");
     }
-    _ = try writer.write("||\n");
+    try writer.writeAll("||\n");
 }
 
 pub fn writeData(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     _ = self;
     for (fields.*) |field| {
-        _ = try writer.write("| ");
-        _ = try writer.write(try escape.jira(field));
-        _ = try writer.write(" ");
+        try writer.writeAll("| ");
+        try escape.writeJira(writer, field);
+        try writer.writeAll(" ");
     }
-    _ = try writer.write("|\n");
+    try writer.writeAll("|\n");
 }
 
 pub fn end(self: *Self, writer: *std.Io.Writer) !void {

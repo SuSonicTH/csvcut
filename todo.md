@@ -17,5 +17,5 @@
 ### cleanup
 
 ## testing
-* test main
-* test outputs
+* unit tests for main
+* output/integration tests: see `test/integration.sh` (run by `zig build test`)

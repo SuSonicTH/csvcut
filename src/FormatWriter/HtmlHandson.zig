@@ -1,53 +1,59 @@
 const std = @import("std");
 const runtime = @import("../runtime.zig");
+const escape = @import("escape.zig");
 const Self = @This();
 
-firstLine: bool = true,
+showHeader: bool,
+header: ?[][]const u8 = null,
 lineCount: usize = 0,
 
-pub fn init() !Self {
-    return .{};
+pub fn init(showHeader: bool, header: ?[][]const u8) !Self {
+    return .{
+        .showHeader = showHeader,
+        .header = header,
+    };
 }
 
 pub fn start(self: *Self, writer: *std.Io.Writer) !void {
-    _ = try writer.write(@embedFile("HtmlHandsonHeader.html"));
+    try writer.writeAll(@embedFile("HtmlHandsonHeader.html"));
+
+    if (!self.showHeader) {
+        try writer.writeAll("false\n");
+    } else if (self.header) |header| {
+        try writer.writeAll("[");
+        for (header, 0..) |field, i| {
+            if (i > 0) {
+                try writer.writeAll(", ");
+            }
+            try escape.writeJsonString(writer, field);
+        }
+        try writer.writeAll("]\n");
+    } else {
+        // Handsontable generates column headers from the data when given `true`.
+        try writer.writeAll("true\n");
+    }
+
+    try writer.writeAll("            });\n");
+    try writer.writeAll("        });\n");
+    try writer.writeAll("var data = [\n");
     self.lineCount = 0;
 }
 
 pub fn writeHeader(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
     _ = self;
-    _ = try writer.write("[");
-    for (fields.*, 0..) |field, i| {
-        if (i > 0) {
-            _ = try writer.write(", ");
-        }
-        _ = try writer.write("'");
-        _ = try writer.write(field);
-        _ = try writer.write("'");
-    }
-    _ = try writer.write("]\n");
-    _ = try writer.write("            });\n");
-    _ = try writer.write("        });\n");
-    _ = try writer.write("var data = [\n");
+    _ = writer;
+    _ = fields;
 }
 
 pub fn writeData(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u8) !void {
-    if (!self.firstLine) {
-        _ = try writer.write(",\n");
-    } else {
-        self.firstLine = false;
-    }
-
-    _ = try writer.write("[");
+    try writer.writeAll("[");
     for (fields.*, 0..) |field, i| {
         if (i > 0) {
-            _ = try writer.write(", ");
+            try writer.writeAll(", ");
         }
-        _ = try writer.write("\"");
-        _ = try writer.write(field);
-        _ = try writer.write("\"");
+        try escape.writeJsonString(writer, field);
     }
-    _ = try writer.write("]");
+    try writer.writeAll("],\n");
 
     self.lineCount += 1;
     if (self.lineCount == 10000) {
@@ -62,6 +68,6 @@ pub fn writeData(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u
 
 pub fn end(self: *Self, writer: *std.Io.Writer) !void {
     _ = self;
-    _ = try writer.write("\n];\n");
-    _ = try writer.write(@embedFile("HtmlHandsonFooter.html"));
+    try writer.writeAll("];\n");
+    try writer.writeAll(@embedFile("HtmlHandsonFooter.html"));
 }
