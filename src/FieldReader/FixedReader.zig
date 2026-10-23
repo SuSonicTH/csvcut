@@ -18,10 +18,10 @@ fields: ?[][]const u8 = undefined,
 pos: usize = 0,
 extraLineEnd: u2,
 
-pub fn init(file: *std.fs.File, widhts: []const usize, trim: bool, extraLineEnd: u2, allocator: std.mem.Allocator) !Self {
+pub fn init(file: *std.Io.File, io: std.Io, widhts: []const usize, trim: bool, extraLineEnd: u2, allocator: std.mem.Allocator) !Self {
     var reader: Self = .{
         .allocator = allocator,
-        .memMapper = try MemMapper.init(file.*, false),
+        .memMapper = try MemMapper.init(file.*, io, false),
         .trim = trim,
         .extraLineEnd = extraLineEnd,
     };
@@ -94,10 +94,7 @@ fn expectEqualStringsArray(expected: []const []const u8, actual: [][]const u8) !
 }
 
 fn writeFile(file_path: []const u8, data: []const u8) !void {
-    const file = try std.fs.cwd().createFile(file_path, .{});
-    defer file.close();
-
-    try file.writeAll(data);
+    try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = file_path, .data = data });
 }
 
 fn expectDataMatches(reader: *Self) !void {
@@ -111,10 +108,10 @@ test "fields without EOL" {
     const fileName: []const u8 = "./test/fixedLenTest.dat";
     try writeFile(fileName, "A B   C     D         1 2   3     4         1212341234561234567890");
 
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try init(&file, &.{ 2, 4, 6, 10 }, false, 0, testing.allocator);
+    var reader = try init(&file, std.testing.io, &.{ 2, 4, 6, 10 }, false, 0, testing.allocator);
     defer reader.deinit();
 
     try expectDataMatches(&reader);
@@ -124,10 +121,10 @@ test "fields with LF" {
     const fileName: []const u8 = "./test/fixedLenTest.dat";
     try writeFile(fileName, "A B   C     D         \n1 2   3     4         \n1212341234561234567890\n");
 
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try init(&file, &.{ 2, 4, 6, 10 }, false, 1, testing.allocator);
+    var reader = try init(&file, std.testing.io, &.{ 2, 4, 6, 10 }, false, 1, testing.allocator);
     defer reader.deinit();
 
     try expectDataMatches(&reader);
@@ -137,10 +134,10 @@ test "fields with CR LF" {
     const fileName: []const u8 = "./test/fixedLenTest.dat";
     try writeFile(fileName, "A B   C     D         \r\n1 2   3     4         \r\n1212341234561234567890\r\n");
 
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try init(&file, &.{ 2, 4, 6, 10 }, false, 2, testing.allocator);
+    var reader = try init(&file, std.testing.io, &.{ 2, 4, 6, 10 }, false, 2, testing.allocator);
     defer reader.deinit();
 
     try expectDataMatches(&reader);
@@ -150,10 +147,10 @@ test "fields with CR LF exept last line" {
     const fileName: []const u8 = "./test/fixedLenTest.dat";
     try writeFile(fileName, "A B   C     D         \r\n1 2   3     4         \r\n1212341234561234567890");
 
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try init(&file, &.{ 2, 4, 6, 10 }, false, 2, testing.allocator);
+    var reader = try init(&file, std.testing.io, &.{ 2, 4, 6, 10 }, false, 2, testing.allocator);
     defer reader.deinit();
 
     try expectDataMatches(&reader);
@@ -163,10 +160,10 @@ test "fields trimmed" {
     const fileName: []const u8 = "./test/fixedLenTest.dat";
     try writeFile(fileName, "A B   C     D         1 2   3     4         1212341234561234567890");
 
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try init(&file, &.{ 2, 4, 6, 10 }, true, 0, testing.allocator);
+    var reader = try init(&file, std.testing.io, &.{ 2, 4, 6, 10 }, true, 0, testing.allocator);
     defer reader.deinit();
 
     try expectEqualStringsArray(&[_][]const u8{ "A", "B", "C", "D" }, (try reader.getFields()).?);

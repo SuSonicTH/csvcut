@@ -19,7 +19,7 @@ pub const Fields = struct {
 
     pub fn get(self: *Fields) !*const [][]const u8 {
         if (!self.ready) {
-            self.fields[self.fields.len - 1] = try std.fmt.allocPrint(self.allocator, "{d}", .{self.count});
+            self.fields[self.fields.len - 1] = try self.allocator.print("{d}", .{self.count});
             self.ready = true;
         }
         return &self.fields;
@@ -53,22 +53,27 @@ pub const UniqueAgregator = struct {
 
 pub const CountAggregator = struct {
     allocator: std.mem.Allocator,
-    countMap: std.StringArrayHashMap(Fields),
+    countMap: std.array_hash_map.String(Fields),
     keyBuffer: std.array_list.Managed(u8),
 
     pub fn init(allocator: std.mem.Allocator) !CountAggregator {
         return .{
             .allocator = allocator,
-            .countMap = std.StringArrayHashMap(Fields).init(allocator),
+            .countMap = .empty,
             .keyBuffer = try std.array_list.Managed(u8).initCapacity(allocator, 1024),
         };
+    }
+
+    pub fn deinit(self: *CountAggregator) void {
+        self.countMap.deinit(self.allocator);
+        self.keyBuffer.deinit();
     }
 
     pub fn add(self: *CountAggregator, fields: *const [][]const u8) !void {
         if (self.countMap.getEntry(try self.getKey(fields))) |entry| {
             entry.value_ptr.*.count += 1;
         } else {
-            try self.countMap.put(try self.allocator.dupe(u8, self.keyBuffer.items), try Fields.init(fields, self.allocator));
+            try self.countMap.put(self.allocator, try self.allocator.dupe(u8, self.keyBuffer.items), try Fields.init(fields, self.allocator));
         }
     }
 

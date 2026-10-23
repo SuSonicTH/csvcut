@@ -8,14 +8,14 @@ allocator: std.mem.Allocator,
 lineReader: MemMappedLineReader,
 csvLine: CsvLine,
 
-pub fn init(file: *std.fs.File, csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !Self {
+pub fn init(file: *std.Io.File, io: std.Io, csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !Self {
     var csvLineParser = try CsvLine.init(allocator, csvLineOptions);
     errdefer csvLineParser.deinit();
 
     return .{
         .allocator = allocator,
         .csvLine = csvLineParser,
-        .lineReader = try MemMappedLineReader.init(file, false),
+        .lineReader = try MemMappedLineReader.init(file, io, false),
     };
 }
 
@@ -35,7 +35,6 @@ pub fn getFields(self: *Self) !?[][]const u8 {
     return null;
 }
 
-
 // Tests
 const testing = std.testing;
 
@@ -48,10 +47,7 @@ fn expectEqualStringsArray(expected: []const []const u8, actual: [][]const u8) !
 }
 
 fn writeFile(file_path: []const u8, data: []const u8) !void {
-    const file = try std.fs.cwd().createFile(file_path, .{});
-    defer file.close();
-
-    try file.writeAll(data);
+    try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = file_path, .data = data });
 }
 
 const fileName: []const u8 = "test/CsvReaderTest.csv";
@@ -76,10 +72,10 @@ fn writeTestFile() !void {
 
 test "reading" {
     try writeTestFile();
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try init(&file,  .{}, testing.allocator);
+    var reader = try init(&file, std.testing.io, .{}, testing.allocator);
     defer reader.deinit();
 
     try expectEqualStringsArray(HEADER, (try reader.getFields()).?);
@@ -92,10 +88,10 @@ test "reading" {
 
 test "reset after 3 lines read" {
     try writeTestFile();
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try init(&file,  .{}, testing.allocator);
+    var reader = try init(&file, std.testing.io, .{}, testing.allocator);
     defer reader.deinit();
 
     try expectEqualStringsArray(HEADER, (try reader.getFields()).?);

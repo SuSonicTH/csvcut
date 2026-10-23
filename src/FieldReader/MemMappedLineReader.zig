@@ -8,9 +8,9 @@ next: usize = 0,
 
 const Self = @This();
 
-pub fn init(file: *std.fs.File, includeEol: bool) !Self {
+pub fn init(file: *std.Io.File, io: std.Io, includeEol: bool) !Self {
     var lineReader: Self = .{
-        .memMapper = try MemMapper.init(file.*, false),
+        .memMapper = try MemMapper.init(file.*, io, false),
         .includeEol = includeEol,
     };
     errdefer lineReader.deinit();
@@ -62,10 +62,7 @@ pub fn reset(self: *Self) void {
 const testing = std.testing;
 
 fn writeFile(file_path: []const u8, data: []const u8) !void {
-    const file = try std.fs.cwd().createFile(file_path, .{});
-    defer file.close();
-
-    try file.writeAll(data);
+    try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = file_path, .data = data });
 }
 
 const fileName: []const u8 = "test/MemMappedLineReaderTest.txt";
@@ -73,10 +70,10 @@ const fileName: []const u8 = "test/MemMappedLineReaderTest.txt";
 test "file with LF" {
     try writeFile(fileName, "one\ntwo\nthree\n");
 
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try init(&file, false);
+    var reader = try init(&file, std.testing.io, false);
     defer reader.deinit();
 
     try testing.expectEqualStrings("one", (try reader.readLine()).?);
@@ -88,10 +85,10 @@ test "file with LF" {
 test "file with CR LF" {
     try writeFile(fileName, "one\r\ntwo\r\nthree\r\n");
 
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try init(&file, false);
+    var reader = try init(&file, std.testing.io, false);
     defer reader.deinit();
 
     try testing.expectEqualStrings("one", (try reader.readLine()).?);
@@ -103,10 +100,10 @@ test "file with CR LF" {
 test "file with LF included" {
     try writeFile(fileName, "one\ntwo\nthree\n");
 
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try init(&file, true);
+    var reader = try init(&file, std.testing.io, true);
     defer reader.deinit();
 
     try testing.expectEqualStrings("one\n", (try reader.readLine()).?);
@@ -118,10 +115,10 @@ test "file with LF included" {
 test "file with CR LF included" {
     try writeFile(fileName, "one\r\ntwo\r\nthree\r\n");
 
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try init(&file, true);
+    var reader = try init(&file, std.testing.io, true);
     defer reader.deinit();
 
     try testing.expectEqualStrings("one\r\n", (try reader.readLine()).?);
@@ -133,10 +130,10 @@ test "file with CR LF included" {
 test "reset" {
     try writeFile(fileName, "one\ntwo\nthree\n");
 
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try init(&file, false);
+    var reader = try init(&file, std.testing.io, false);
     defer reader.deinit();
 
     try testing.expectEqualStrings("one", (try reader.readLine()).?);

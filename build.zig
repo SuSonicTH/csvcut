@@ -4,10 +4,20 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const mvzr = b.dependency("mvzr", .{
+    const mvzr = b.createModule(.{
+        .root_source_file = b.path("vendor/mvzr/mvzr.zig"),
         .target = target,
         .optimize = optimize,
     });
+
+    // `@embedFile` cannot reach outside the module root, so expose the
+    // license as a generated module containing a copy of LICENSE.txt.
+    const license = blk: {
+        const write_files = b.addWriteFiles();
+        const root = write_files.add("license.zig", "pub const text = @embedFile(\"license.txt\");\n");
+        _ = write_files.addCopyFile(b.path("LICENSE.txt"), "license.txt");
+        break :blk b.createModule(.{ .root_source_file = root });
+    };
 
     const exe = b.addExecutable(.{
         .name = "csvcut",
@@ -16,15 +26,13 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "mvzr", .module = mvzr.module("mvzr") },
+                .{ .name = "mvzr", .module = mvzr },
+                .{ .name = "license", .module = license },
             },
         }),
     });
 
-    const src = std.fs.cwd().openDir("./src", .{}) catch @panic("could not get ./src/ dir");
-    std.fs.cwd().copyFile("./LICENSE.txt", src, "LICENSE.txt", .{}) catch @panic("could not copy ./LICENSE.txt to ./src/LICENSE.txt");
-
-    if (optimize != .Debug) {
+    if (optimize != .debug) {
         exe.root_module.strip = true;
     }
 
@@ -32,9 +40,7 @@ pub fn build(b: *std.Build) void {
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
 
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
+    run_cmd.addPassthruArgs();
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
@@ -45,7 +51,8 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "mvzr", .module = mvzr.module("mvzr") },
+                .{ .name = "mvzr", .module = mvzr },
+                .{ .name = "license", .module = license },
             },
         }),
     });

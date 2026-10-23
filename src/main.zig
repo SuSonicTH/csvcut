@@ -1,4 +1,5 @@
 const std = @import("std");
+const runtime = @import("runtime.zig");
 const CsvLine = @import("CsvLine").CsvLine;
 const Options = @import("options.zig").Options;
 const Filter = @import("options.zig").Filter;
@@ -15,35 +16,33 @@ const CountAggregator = Aggregate.CountAggregator;
 const UniqueAgregator = Aggregate.UniqueAgregator;
 const ExitCode = @import("exitCode.zig").ExitCode;
 
-var allocator: std.mem.Allocator = undefined;
 var options: Options = undefined;
 
-pub fn main() !void {
-    _main() catch |err| switch (err) {
+pub fn main(init: std.process.Init) !void {
+    runtime.io = init.io;
+    runtime.allocator = init.arena.allocator();
+    runtime.environ = init.environ_map;
+
+    _main(init) catch |err| switch (err) {
         error.OutOfMemory => ExitCode.outOfMemory.printErrorAndExit(.{}),
         else => ExitCode.genericError.printErrorAndExit(.{err}),
     };
 }
 
-fn _main() !void {
-    var timer = try std.time.Timer.start();
+fn _main(init: std.process.Init) !void {
+    const timerStart = std.Io.Clock.awake.now(runtime.io);
     Utf8Output.init();
     defer Utf8Output.deinit();
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
-    defer arena.deinit();
-    allocator = arena.allocator();
-
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+    const allocator = runtime.allocator;
+    const args = try init.minimal.args.toSlice(allocator);
     const arguments = try castArgs(args);
     defer allocator.free(arguments);
 
     options = try Options.init(allocator);
     defer options.deinit();
 
-    if (config.readConfigFromFile("default.config", allocator) catch null) |defaultArguments| {
+    if (config.readConfigFromFile(runtime.io, init.environ_map, "default.config", allocator) catch null) |defaultArguments| {
         try ArgumentParser.parse(&options, defaultArguments.items, allocator);
     }
     try ArgumentParser.parse(&options, arguments, allocator);
@@ -55,17 +54,17 @@ fn _main() !void {
 
     try ArgumentParser.validateArguments(&options);
 
-    var outputFile: std.fs.File = undefined;
+    var outputFile: std.Io.File = undefined;
     if (options.outputName) |outputName| {
-        outputFile = std.fs.cwd().createFile(outputName, .{}) catch |err| ExitCode.couldNotOpenOutputFile.printErrorAndExit(.{ outputName, err });
+        outputFile = std.Io.Dir.cwd().createFile(runtime.io, outputName, .{}) catch |err| ExitCode.couldNotOpenOutputFile.printErrorAndExit(.{ outputName, err });
     } else {
-        outputFile = std.fs.File.stdout();
+        outputFile = std.Io.File.stdout();
     }
-    defer outputFile.close();
+    defer outputFile.close(runtime.io);
 
     for (options.inputFiles.items) |fileName| {
-        var file = std.fs.cwd().openFile(fileName, .{}) catch |err| ExitCode.couldNotOpenInputFile.printErrorAndExit(.{ fileName, err });
-        defer file.close();
+        var file = std.Io.Dir.cwd().openFile(runtime.io, fileName, .{}) catch |err| ExitCode.couldNotOpenInputFile.printErrorAndExit(.{ fileName, err });
+        defer file.close(runtime.io);
 
         var fieldReader = try initFileReader(&file);
         defer fieldReader.deinit();
@@ -75,10 +74,11 @@ fn _main() !void {
 
     if (options.time) {
         var stderr_buffer: [1024]u8 = undefined;
-        var stderr_writer = std.fs.File.stderr().writer(&stderr_buffer);
+        var stderr_writer = std.Io.File.stderr().writer(runtime.io, &stderr_buffer);
         var stderr = &stderr_writer.interface;
 
-        const timeNeeded = @as(f32, @floatFromInt(timer.lap())) / 1000000.0;
+        const elapsed = timerStart.durationTo(std.Io.Clock.awake.now(runtime.io));
+        const timeNeeded = @as(f32, @floatFromInt(elapsed.toNanoseconds())) / 1000000.0;
         if (timeNeeded > 1000) {
             _ = try stderr.print("time needed: {d:0.2}s\n", .{timeNeeded / 1000.0});
         } else {
@@ -88,32 +88,32 @@ fn _main() !void {
     }
 }
 
-fn castArgs(args: [][:0]u8) ![][]const u8 {
-    var ret = try allocator.alloc([]const u8, args.len);
+fn castArgs(args: []const [:0]const u8) ![][]const u8 {
+    var ret = try runtime.allocator.alloc([]const u8, args.len);
     for (args, 0..) |arg, i| {
-        ret[i] = arg[0..];
+        ret[i] = arg;
     }
     return ret;
 }
 
-fn initFileReader(file: *std.fs.File) !FieldReader {
+fn initFileReader(file: *std.Io.File) !FieldReader {
     if (options.lengths) |lengths| {
-        return try FieldReader.initFixedReader(file, options.inputLimit, options.skipLine, lengths.items, options.trim, options.extraLineEnd, allocator);
+        return try FieldReader.initFixedReader(file, runtime.io, options.inputLimit, options.skipLine, lengths.items, options.trim, options.extraLineEnd, runtime.allocator);
     } else {
-        return try FieldReader.initCsvReader(file, options.inputLimit, options.skipLine, .{ .separator = options.inputSeparator[0], .trim = options.trim, .quoute = if (options.inputQuoute) |quote| quote[0] else null }, allocator);
+        return try FieldReader.initCsvReader(file, runtime.io, options.inputLimit, options.skipLine, .{ .separator = options.inputSeparator[0], .trim = options.trim, .quoute = if (options.inputQuoute) |quote| quote[0] else null }, runtime.allocator);
     }
 }
 
 const OutputWriter = struct {
     var formatWriter: FormatWriter = undefined;
-    var lineBuffer: std.array_list.Managed(u8) = undefined;
+    var lineBuffer: std.Io.Writer.Allocating = undefined;
     var outputWriter: *std.Io.Writer = undefined;
     var initialized = false;
 
     fn init(writer: *std.Io.Writer, fieldWidths: FieldWidths) !void {
         if (!initialized) {
-            formatWriter = try FormatWriter.init(options, allocator, fieldWidths);
-            lineBuffer = try std.array_list.Managed(u8).initCapacity(allocator, 1024);
+            formatWriter = try FormatWriter.init(options, runtime.allocator, fieldWidths);
+            lineBuffer = try std.Io.Writer.Allocating.initCapacity(runtime.allocator, 1024);
             try formatWriter.start(writer);
             initialized = true;
         }
@@ -131,19 +131,15 @@ const OutputWriter = struct {
 
     fn writeBuffered(fields: *const [][]const u8, isHeader: bool) !void {
         lineBuffer.clearRetainingCapacity();
-        var buffer: [4096]u8 = undefined;
-        var writer_adapter = lineBuffer.writer().adaptToNewApi(&buffer);
-        var writer = &writer_adapter.new_interface;
         if (isHeader) {
-            try formatWriter.writeHeader(writer, fields);
+            try formatWriter.writeHeader(&lineBuffer.writer, fields);
         } else {
-            try formatWriter.writeData(writer, fields);
+            try formatWriter.writeData(&lineBuffer.writer, fields);
         }
-        try writer.flush();
     }
 
     fn getBuffer() []u8 {
-        return lineBuffer.items;
+        return lineBuffer.written();
     }
 
     fn writeDirect(fields: *const [][]const u8, isHeader: bool) !void {
@@ -155,11 +151,11 @@ const OutputWriter = struct {
     }
 
     fn commitBuffer() !void {
-        _ = try outputWriter.write(lineBuffer.items);
+        _ = try outputWriter.write(lineBuffer.written());
     }
 };
 
-fn proccessFile(fieldReader: anytype, outputFile: std.fs.File) !void {
+fn proccessFile(fieldReader: anytype, outputFile: std.Io.File) !void {
     const header = try processHeader(fieldReader);
 
     if (options.count) {
@@ -183,7 +179,7 @@ fn processHeader(fieldReader: anytype) !?std.array_list.Managed([]const u8) {
     fieldReader.setFiltersOut(options.filtersOut);
 
     if (options.header != null and options.outputHeader) {
-        var header = std.array_list.Managed([]const u8).init(allocator);
+        var header = std.array_list.Managed([]const u8).init(runtime.allocator);
         if (try fieldReader.getSelectedFields(options.header.?)) |selectedHeader| {
             for (selectedHeader) |field| {
                 try header.append(field);
@@ -198,16 +194,12 @@ fn processHeader(fieldReader: anytype) !?std.array_list.Managed([]const u8) {
     return null;
 }
 
-pub fn bigBufferedWriter(underlying_stream: anytype) std.io.BufferedWriter(1024 * 16, @TypeOf(underlying_stream)) {
-    return .{ .unbuffered_writer = underlying_stream };
-}
-
-fn proccessFileDirect(fieldReader: anytype, outputFile: std.fs.File, header: ?std.array_list.Managed([]const u8)) !void {
-    var fieldWidths = try FieldWidths.init(options.outputFormat, options.fileHeader, options.header, fieldReader, allocator);
+fn proccessFileDirect(fieldReader: anytype, outputFile: std.Io.File, header: ?std.array_list.Managed([]const u8)) !void {
+    var fieldWidths = try FieldWidths.init(options.outputFormat, options.fileHeader, options.header, fieldReader, runtime.allocator);
     defer fieldWidths.deinit();
 
     var buffer: [4096]u8 = undefined;
-    var writer = outputFile.writer(&buffer);
+    var writer = outputFile.writer(runtime.io, &buffer);
     try OutputWriter.init(&writer.interface, fieldWidths);
     defer OutputWriter.deinit();
 
@@ -239,8 +231,8 @@ fn listHeader() !void {
         try printHeader(header);
     } else {
         const fileName = options.inputFiles.items[0];
-        var file = std.fs.cwd().openFile(fileName, .{}) catch |err| ExitCode.couldNotOpenInputFile.printErrorAndExit(.{ fileName, err });
-        defer file.close();
+        var file = std.Io.Dir.cwd().openFile(runtime.io, fileName, .{}) catch |err| ExitCode.couldNotOpenInputFile.printErrorAndExit(.{ fileName, err });
+        defer file.close(runtime.io);
 
         var fieldReader = try initFileReader(&file);
         defer fieldReader.deinit();
@@ -255,7 +247,7 @@ fn listHeader() !void {
 
 fn printHeader(header: [][]const u8) !void {
     var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    var stdout_writer = std.Io.File.stdout().writer(runtime.io, &stdout_buffer);
     var stdout = &stdout_writer.interface;
 
     for (header) |field| {
@@ -265,15 +257,15 @@ fn printHeader(header: [][]const u8) !void {
     try stdout.flush();
 }
 
-fn proccessFileUnique(fieldReader: anytype, outputFile: std.fs.File, outputHeader: ?std.array_list.Managed([]const u8)) !void {
-    var uniqueAgregator = UniqueAgregator.init(allocator);
+fn proccessFileUnique(fieldReader: anytype, outputFile: std.Io.File, outputHeader: ?std.array_list.Managed([]const u8)) !void {
+    var uniqueAgregator = UniqueAgregator.init(runtime.allocator);
     defer uniqueAgregator.deinit();
 
-    var fieldWidths = try FieldWidths.init(options.outputFormat, options.fileHeader, options.header, fieldReader, allocator);
+    var fieldWidths = try FieldWidths.init(options.outputFormat, options.fileHeader, options.header, fieldReader, runtime.allocator);
     defer fieldWidths.deinit();
 
     var buffer: [4096]u8 = undefined;
-    var writer = outputFile.writer(&buffer);
+    var writer = outputFile.writer(runtime.io, &buffer);
     try OutputWriter.init(&writer.interface, fieldWidths);
     defer OutputWriter.deinit();
 
@@ -298,18 +290,19 @@ fn proccessFileUnique(fieldReader: anytype, outputFile: std.fs.File, outputHeade
     try writer.interface.flush();
 }
 
-fn proccessFileCount(fieldReader: anytype, outputFile: std.fs.File, outputHeader: ?std.array_list.Managed([]const u8)) !void {
-    var countAggregator = try CountAggregator.init(allocator);
+fn proccessFileCount(fieldReader: anytype, outputFile: std.Io.File, outputHeader: ?std.array_list.Managed([]const u8)) !void {
+    var countAggregator = try CountAggregator.init(runtime.allocator);
+    defer countAggregator.deinit();
 
     while (try fieldReader.readLine()) |fields| {
         try countAggregator.add(&fields);
     }
 
-    var fieldWidths = try FieldWidths.initCountAggregated(options.outputFormat, outputHeader, &countAggregator, allocator);
+    var fieldWidths = try FieldWidths.initCountAggregated(options.outputFormat, outputHeader, &countAggregator, runtime.allocator);
     defer fieldWidths.deinit();
 
     var buffer: [4096]u8 = undefined;
-    var writer = outputFile.writer(&buffer);
+    var writer = outputFile.writer(runtime.io, &buffer);
     try OutputWriter.init(&writer.interface, fieldWidths);
     defer OutputWriter.deinit();
 

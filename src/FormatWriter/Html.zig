@@ -1,4 +1,5 @@
 const std = @import("std");
+const runtime = @import("../runtime.zig");
 const Self = @This();
 
 pub const Options = struct {};
@@ -45,7 +46,7 @@ pub fn writeData(self: *Self, writer: *std.Io.Writer, fields: *const [][]const u
     self.lineCount += 1;
     if (self.lineCount == 50000) {
         var stderr_buffer: [1024]u8 = undefined;
-        var stderr_writer = std.fs.File.stderr().writer(&stderr_buffer);
+        var stderr_writer = std.Io.File.stderr().writer(runtime.io, &stderr_buffer);
         var stderr = &stderr_writer.interface;
         _ = try stderr.write("Warning: using more then 50000 lines in html output causes performance issues and possible crashes in the browser\n");
         try stderr.flush();

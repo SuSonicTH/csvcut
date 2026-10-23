@@ -10,7 +10,7 @@ const utf8CodePage: windows.UINT = 65001;
 var oldCodePage: windows.UINT = 0;
 
 pub fn init() void {
-    if (builtin.os.tag == .windows) {
+    if (builtin.target.os.tag == .windows) {
         oldCodePage = GetConsoleOutputCP();
         if (oldCodePage != utf8CodePage) {
             _ = SetConsoleOutputCP(utf8CodePage);
@@ -19,7 +19,7 @@ pub fn init() void {
 }
 
 pub fn deinit() void {
-    if (builtin.os.tag == .windows) {
+    if (builtin.target.os.tag == .windows) {
         if (oldCodePage > 0 and oldCodePage != utf8CodePage) {
             _ = SetConsoleOutputCP(oldCodePage);
         }

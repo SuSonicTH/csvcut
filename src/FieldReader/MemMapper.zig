@@ -2,12 +2,13 @@ const std = @import("std");
 const builtin = @import("builtin");
 const Self = @This();
 
-file: std.fs.File,
+file: std.Io.File,
+io: std.Io,
 file_mapping: windows.HANDLE = undefined,
 
-pub fn init(file: std.fs.File, writeable: bool) !Self {
-    if (builtin.os.tag == .windows) {
-        const protection: windows.DWORD = if (writeable) windows.PAGE_READWRITE else windows.PAGE_READONLY;
+pub fn init(file: std.Io.File, io: std.Io, writeable: bool) !Self {
+    if (builtin.target.os.tag == .windows) {
+        const protection: windows.DWORD = if (writeable) PAGE_READWRITE else PAGE_READONLY;
         const file_mapping = CreateFileMappingA(file.handle, null, protection, 0, 0, null);
         if (file_mapping == null) {
             return MemMapperError.CouldNotMapFile;
@@ -15,25 +16,27 @@ pub fn init(file: std.fs.File, writeable: bool) !Self {
 
         return .{
             .file = file,
+            .io = io,
             .file_mapping = file_mapping.?,
         };
     } else {
         return .{
             .file = file,
+            .io = io,
         };
     }
 }
 
 pub fn deinit(self: *Self) void {
-    if (builtin.os.tag == .windows) {
-        _ = CloseHandle(self.file_mapping);
+    if (builtin.target.os.tag == .windows) {
+        CloseHandle(self.file_mapping);
     }
 }
 
 pub fn map(self: *Self, comptime T: type, options: Options) ![]T {
-    const len = if (options.size != 0) options.size else (try self.file.stat()).size;
+    const len = if (options.size != 0) options.size else (try self.file.stat(self.io)).size;
 
-    if (builtin.os.tag == .windows) {
+    if (builtin.target.os.tag == .windows) {
         var access: windows.DWORD = 0;
         if (options.read) access |= FILE_MAP_READ;
         if (options.write) access |= FILE_MAP_WRITE;
@@ -44,9 +47,9 @@ pub fn map(self: *Self, comptime T: type, options: Options) ![]T {
         }
         return @as([*]T, @ptrCast(ptr))[0..len];
     } else {
-        var prot: u32 = 0;
-        if (options.read) prot |= std.posix.PROT.READ;
-        if (options.write) prot |= std.posix.PROT.WRITE;
+        var prot: std.posix.PROT = .{};
+        if (options.read) prot.READ = true;
+        if (options.write) prot.WRITE = true;
 
         return @ptrCast(try std.posix.mmap(null, len, prot, .{ .TYPE = .SHARED }, self.file.handle, options.offset));
     }
@@ -54,7 +57,7 @@ pub fn map(self: *Self, comptime T: type, options: Options) ![]T {
 
 pub fn unmap(self: *Self, memory: anytype) void {
     _ = self;
-    if (builtin.os.tag == .windows) {
+    if (builtin.target.os.tag == .windows) {
         _ = UnmapViewOfFile(@constCast(std.mem.sliceAsBytes(memory).ptr));
     } else {
         std.posix.munmap(@alignCast(memory));
@@ -77,6 +80,8 @@ const windows = std.os.windows;
 
 const FILE_MAP_READ: windows.DWORD = 4;
 const FILE_MAP_WRITE: windows.DWORD = 2;
+const PAGE_READONLY: windows.DWORD = 0x02;
+const PAGE_READWRITE: windows.DWORD = 0x04;
 
 extern "kernel32" fn CreateFileMappingA(hFile: windows.HANDLE, lpFileMappingAttributes: ?*windows.SECURITY_ATTRIBUTES, flProtect: windows.DWORD, dwMaximumSizeHigh: windows.DWORD, dwMaximumSizeLow: windows.DWORD, lpNam: ?windows.LPCSTR) callconv(.winapi) ?windows.HANDLE;
 extern "kernel32" fn MapViewOfFile(hFileMappingObject: windows.HANDLE, dwDesiredAccess: windows.DWORD, dwFileOffsetHigh: windows.DWORD, dwFileOffsetLow: windows.DWORD, dwNumberOfBytesToMa: windows.SIZE_T) callconv(.winapi) ?windows.LPVOID;
@@ -89,10 +94,7 @@ const CloseHandle = windows.CloseHandle;
 const testing = std.testing;
 
 pub fn writeFile(file_path: []const u8, data: []const u8) !void {
-    const file = try std.fs.cwd().createFile(file_path, .{});
-    defer file.close();
-
-    try file.writeAll(data);
+    try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = file_path, .data = data });
 }
 
 test "simple mapping for reading" {
@@ -101,10 +103,10 @@ test "simple mapping for reading" {
 
     try writeFile(fileName, message);
 
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var mapper = try init(file, false);
+    var mapper = try init(file, std.testing.io, false);
     defer mapper.deinit();
 
     const tst = try mapper.map(u8, .{});

@@ -10,12 +10,12 @@ pub const FieldReader = union(enum) {
     csvReader: CsvReader,
     fixedReader: FixedReader,
 
-    pub fn initCsvReader(file: *std.fs.File, csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !FieldReader {
-        return .{ .csvReader = try CsvReader.init(file, csvLineOptions, allocator) };
+    pub fn initCsvReader(file: *std.Io.File, io: std.Io, csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !FieldReader {
+        return .{ .csvReader = try CsvReader.init(file, io, csvLineOptions, allocator) };
     }
 
-    pub fn initFixedReader(file: *std.fs.File, widhts: []const usize, trim: bool, extraLineEnd: u2, allocator: std.mem.Allocator) !FieldReader {
-        return .{ .fixedReader = try FixedReader.init(file, widhts, trim, extraLineEnd, allocator) };
+    pub fn initFixedReader(file: *std.Io.File, io: std.Io, widhts: []const usize, trim: bool, extraLineEnd: u2, allocator: std.mem.Allocator) !FieldReader {
+        return .{ .fixedReader = try FixedReader.init(file, io, widhts, trim, extraLineEnd, allocator) };
     }
 
     pub fn deinit(self: *FieldReader) void {
@@ -51,18 +51,18 @@ selected: ?[][]const u8 = null,
 filters: ?std.array_list.Managed(Filter) = null,
 filtersOut: ?std.array_list.Managed(Filter) = null,
 
-pub fn initCsvReader(file: *std.fs.File, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !Self {
+pub fn initCsvReader(file: *std.Io.File, io: std.Io, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), csvLineOptions: CsvLine.Options, allocator: std.mem.Allocator) !Self {
     return .{
-        .fieldReader = try FieldReader.initCsvReader(file, csvLineOptions, allocator),
+        .fieldReader = try FieldReader.initCsvReader(file, io, csvLineOptions, allocator),
         .allocator = allocator,
         .inputLimit = inputLimit,
         .skipLine = skipLine,
     };
 }
 
-pub fn initFixedReader(file: *std.fs.File, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), widhts: []const usize, trim: bool, extraLineEnd: u2, allocator: std.mem.Allocator) !Self {
+pub fn initFixedReader(file: *std.Io.File, io: std.Io, inputLimit: usize, skipLine: ?std.AutoHashMap(usize, bool), widhts: []const usize, trim: bool, extraLineEnd: u2, allocator: std.mem.Allocator) !Self {
     return .{
-        .fieldReader = try FieldReader.initFixedReader(file, widhts, trim, extraLineEnd, allocator),
+        .fieldReader = try FieldReader.initFixedReader(file, io, widhts, trim, extraLineEnd, allocator),
         .allocator = allocator,
         .inputLimit = inputLimit,
         .skipLine = skipLine,
@@ -207,10 +207,7 @@ fn expectEqualStringsArray(expected: []const []const u8, actual: [][]const u8) !
 }
 
 fn writeFile(file_path: []const u8, data: []const u8) !void {
-    const file = try std.fs.cwd().createFile(file_path, .{});
-    defer file.close();
-
-    try file.writeAll(data);
+    try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = file_path, .data = data });
 }
 
 const fileName: []const u8 = "./test/CsvReaderTest.csv";
@@ -235,10 +232,10 @@ fn writeTestFile() !void {
 
 test "unfiltered reading" {
     try writeTestFile();
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try initCsvReader(&file, 0, null, .{}, testing.allocator);
+    var reader = try initCsvReader(&file, std.testing.io, 0, null, .{}, testing.allocator);
     defer reader.deinit();
 
     try expectEqualStringsArray(HEADER, (try reader.readLine()).?);
@@ -251,10 +248,10 @@ test "unfiltered reading" {
 
 test "input limit 1" {
     try writeTestFile();
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try initCsvReader(&file, 1, null, .{}, testing.allocator);
+    var reader = try initCsvReader(&file, std.testing.io, 1, null, .{}, testing.allocator);
     defer reader.deinit();
 
     try expectEqualStringsArray(HEADER, (try reader.readLine()).?);
@@ -263,10 +260,10 @@ test "input limit 1" {
 
 test "input limit 3" {
     try writeTestFile();
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try initCsvReader(&file, 3, null, .{}, testing.allocator);
+    var reader = try initCsvReader(&file, std.testing.io, 3, null, .{}, testing.allocator);
     defer reader.deinit();
 
     try expectEqualStringsArray(HEADER, (try reader.readLine()).?);
@@ -277,15 +274,15 @@ test "input limit 3" {
 
 test "skip lines 2 & 3" {
     try writeTestFile();
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
     var skip = std.AutoHashMap(usize, bool).init(testing.allocator);
     defer skip.deinit();
     try skip.put(2, true);
     try skip.put(3, true);
 
-    var reader = try initCsvReader(&file, 0, skip, .{}, testing.allocator);
+    var reader = try initCsvReader(&file, std.testing.io, 0, skip, .{}, testing.allocator);
     defer reader.deinit();
 
     try expectEqualStringsArray(HEADER, (try reader.readLine()).?);
@@ -296,10 +293,10 @@ test "skip lines 2 & 3" {
 
 test "reset after 3 lines read" {
     try writeTestFile();
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try initCsvReader(&file, 0, null, .{}, testing.allocator);
+    var reader = try initCsvReader(&file, std.testing.io, 0, null, .{}, testing.allocator);
     defer reader.deinit();
 
     try expectEqualStringsArray(HEADER, (try reader.readLine()).?);
@@ -317,10 +314,10 @@ test "reset after 3 lines read" {
 
 test "input limit 3 reasetLinesRead after header" {
     try writeTestFile();
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try initCsvReader(&file, 3, null, .{}, testing.allocator);
+    var reader = try initCsvReader(&file, std.testing.io, 3, null, .{}, testing.allocator);
     defer reader.deinit();
 
     try expectEqualStringsArray(HEADER, (try reader.readLine()).?);
@@ -334,10 +331,10 @@ test "input limit 3 reasetLinesRead after header" {
 
 test "skipOneLine" {
     try writeTestFile();
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try initCsvReader(&file, 0, null, .{}, testing.allocator);
+    var reader = try initCsvReader(&file, std.testing.io, 0, null, .{}, testing.allocator);
     defer reader.deinit();
 
     try expectEqualStringsArray(HEADER, (try reader.readLine()).?);
@@ -350,10 +347,10 @@ test "skipOneLine" {
 
 test "selected indices 1,2" {
     try writeTestFile();
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try initCsvReader(&file, 0, null, .{}, testing.allocator);
+    var reader = try initCsvReader(&file, std.testing.io, 0, null, .{}, testing.allocator);
     defer reader.deinit();
 
     var selected: [2]usize = .{ 1, 2 };
@@ -369,10 +366,10 @@ test "selected indices 1,2" {
 
 test "selected indices 2,1,0" {
     try writeTestFile();
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try initCsvReader(&file, 0, null, .{}, testing.allocator);
+    var reader = try initCsvReader(&file, std.testing.io, 0, null, .{}, testing.allocator);
     defer reader.deinit();
 
     var selected: [3]usize = .{ 2, 1, 0 };
@@ -388,10 +385,10 @@ test "selected indices 2,1,0" {
 
 test "exclude 0,3" {
     try writeTestFile();
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try initCsvReader(&file, 0, null, .{}, testing.allocator);
+    var reader = try initCsvReader(&file, std.testing.io, 0, null, .{}, testing.allocator);
     defer reader.deinit();
 
     var exclude = std.AutoHashMap(usize, bool).init(testing.allocator);
@@ -416,10 +413,10 @@ test "Filter A" {
         "B,42,43,44\n");
     fileWritten = false;
 
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try initCsvReader(&file, 0, null, .{}, testing.allocator);
+    var reader = try initCsvReader(&file, std.testing.io, 0, null, .{}, testing.allocator);
     defer reader.deinit();
 
     const header = try testing.allocator.dupe([]const u8, (try reader.readLine()).?);
@@ -448,10 +445,10 @@ test "FilterOut A" {
         "B,42,43,44\n");
     fileWritten = false;
 
-    var file = try std.fs.cwd().openFile(fileName, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().openFile(std.testing.io, fileName, .{});
+    defer file.close(std.testing.io);
 
-    var reader = try initCsvReader(&file, 0, null, .{}, testing.allocator);
+    var reader = try initCsvReader(&file, std.testing.io, 0, null, .{}, testing.allocator);
     defer reader.deinit();
 
     const header = try testing.allocator.dupe([]const u8, (try reader.readLine()).?);
